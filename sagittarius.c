@@ -265,7 +265,7 @@ static interpret_result run(VM* vm)
 
 #define BINARY_OP(vm, op) do { value_t b = pop(vm); value_t a = pop(vm); push(vm, a op b); } while (false)
 
-    for (;;)
+    while(true)
     {
 #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
