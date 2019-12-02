@@ -4,6 +4,7 @@
 // -----------------------------------------------------------------------------
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>  
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -211,6 +212,315 @@ void disassemble_chunk(chunk_t* c, const char* name)
 }
 
 // -----------------------------------------------------------------------------
+// ----| scanner |--------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+typedef enum
+{
+    // Single-character tokens.
+    TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
+    TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
+    TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
+    TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
+
+    // One or two character tokens.
+    TOKEN_BANG, TOKEN_BANG_EQUAL,
+    TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,
+    TOKEN_GREATER, TOKEN_GREATER_EQUAL,
+    TOKEN_LESS, TOKEN_LESS_EQUAL,
+
+    // Literals.
+    TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,
+
+    // Keywords.
+    TOKEN_AND, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE,
+    TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
+    TOKEN_PRINT, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
+    TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE,
+
+    TOKEN_ERROR,
+    TOKEN_EOF
+} token_type;
+
+typedef struct
+{
+    token_type type;
+    const char* start;
+    int length;
+    int line;
+} token_t;
+
+
+typedef struct
+{     
+  const char* start;
+  const char* current;
+  int line;
+} scanner_t;
+
+scanner_t scanner;
+
+void init_scanner(const char* src)
+{
+    scanner.start = src;
+    scanner.current = src;
+    scanner.line = 1;
+}
+
+static bool is_at_end()
+{
+  return *scanner.current == '\0';
+}
+
+static bool is_digit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static bool is_alpha(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+static char advance()
+{
+    scanner.current++;
+    return scanner.current[-1];
+}
+
+// returns the current character, but doesn’t consume it
+static char peek()
+{
+    return *scanner.current;
+}
+
+// like peek() but for one character past the current one
+static char peek_next()
+{
+    if (is_at_end()) return '\0';
+    return scanner.current[1]; 
+}
+
+static bool match(char expected)
+{
+    if (is_at_end()) return false;
+    if (*scanner.current != expected) return false;
+
+    scanner.current++;
+    return true;
+}
+
+static token_type check_keyword(int start, int length, const char* rest, token_type type)
+{
+    if (scanner.current - scanner.start == start + length && memcmp(scanner.start + start, rest, length) == 0)
+    {
+        return type;
+    }
+
+    return TOKEN_IDENTIFIER;
+}
+
+static token_type identifier_type()
+{
+    switch (scanner.start[0])
+    {
+    case 'a': return check_keyword(1, 2, "nd", TOKEN_AND);
+    case 'c': return check_keyword(1, 4, "lass", TOKEN_CLASS);
+    case 'e': return check_keyword(1, 3, "lse", TOKEN_ELSE);
+    case 'f':
+        if (scanner.current - scanner.start > 1) 
+        {
+            switch (scanner.start[1])
+            {
+            case 'a': return check_keyword(2, 3, "lse", TOKEN_FALSE);
+            case 'o': return check_keyword(2, 1, "r", TOKEN_FOR);
+            case 'u': return check_keyword(2, 1, "n", TOKEN_FUN);
+            }
+        }
+        break;
+    case 'i': return check_keyword(1, 1, "f", TOKEN_IF);
+    case 'n': return check_keyword(1, 2, "il", TOKEN_NIL);
+    case 'o': return check_keyword(1, 1, "r", TOKEN_OR);
+    case 'p': return check_keyword(1, 4, "rint", TOKEN_PRINT);
+    case 'r': return check_keyword(1, 5, "eturn", TOKEN_RETURN);
+    case 's': return check_keyword(1, 4, "uper", TOKEN_SUPER);
+    case 't':
+        if (scanner.current - scanner.start > 1)
+        {
+            switch (scanner.start[1])
+            {
+            case 'h': return check_keyword(2, 2, "is", TOKEN_THIS);
+            case 'r': return check_keyword(2, 2, "ue", TOKEN_TRUE);
+            }
+        }
+        break; 
+    case 'v': return check_keyword(1, 2, "ar", TOKEN_VAR);
+    case 'w': return check_keyword(1, 4, "hile", TOKEN_WHILE);
+    }
+
+    return TOKEN_IDENTIFIER;
+}
+
+static token_t make_token(token_type type)
+{
+    token_t token;
+    token.type = type;
+    token.start = scanner.start;
+    token.length = (int)(scanner.current - scanner.start);
+    token.line = scanner.line;
+
+    return token;
+}
+
+static token_t error_token(const char* message)
+{
+    token_t token;
+    token.type = TOKEN_ERROR;
+    token.start = message;
+    token.length = (int)strlen(message);
+    token.line = scanner.line;
+
+    return token;
+}
+
+static token_t string()
+{
+    while (peek() != '"' && !is_at_end())
+    {
+        if (peek() == '\n') scanner.line++;
+        advance();
+    }
+
+    if (is_at_end()) return error_token("Unterminated string.");
+
+    // The closing quote.
+    advance();
+    return make_token(TOKEN_STRING); 
+}
+
+static token_t number()
+{
+    while (is_digit(peek())) advance();
+
+    // Look for a fractional part.
+    if (peek() == '.' && is_digit(peek_next()))
+    {
+        // Consume the ".".
+        advance();
+
+        while (is_digit(peek())) advance();
+    }
+
+  return make_token(TOKEN_NUMBER);
+}
+
+static token_t identifier()
+{
+    while (is_alpha(peek()) || is_digit(peek())) advance();
+
+    return make_token(identifier_type());
+}
+
+static void skip_whitespace()
+{
+    while(true)
+    {
+        char c = peek();
+        switch (c)
+        {
+        case ' ':
+        case '\r':
+        case '\t':
+            advance();
+            break;
+        case '\n':
+            scanner.line++;
+            advance();
+            break;
+        case '/':
+            if (peek_next() == '/')
+            {
+                while (peek() != '\n' && !is_at_end()) advance();
+            }
+            else
+            {
+                return;
+            }
+        default:
+            return;
+        }
+    }
+}
+
+token_t scan_token()
+{
+    skip_whitespace();
+
+    scanner.start = scanner.current;
+
+    if (is_at_end()) return make_token(TOKEN_EOF);
+
+    char c = advance();
+
+    // identifiers and keywords
+    if (is_alpha(c)) return identifier();
+
+    if (is_digit(c)) return number();
+
+    switch (c)
+    {
+    // single character tokens
+    case '(': return make_token(TOKEN_LEFT_PAREN);
+    case ')': return make_token(TOKEN_RIGHT_PAREN);
+    case '{': return make_token(TOKEN_LEFT_BRACE);
+    case '}': return make_token(TOKEN_RIGHT_BRACE);
+    case ';': return make_token(TOKEN_SEMICOLON);
+    case ',': return make_token(TOKEN_COMMA);
+    case '.': return make_token(TOKEN_DOT);
+    case '-': return make_token(TOKEN_MINUS);
+    case '+': return make_token(TOKEN_PLUS);
+    case '/': return make_token(TOKEN_SLASH);
+    case '*': return make_token(TOKEN_STAR);
+    // two-character punctuation tokens
+    case '!': return make_token(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);  
+    case '=': return make_token(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+    case '<': return make_token(match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);  
+    case '>': return make_token(match('=') ? TOKEN_GREATER_EQUAL : TOKEN_GREATER);
+    // literal tokens
+    case '"': return string();
+    }
+
+    return error_token("Unexpected character.");
+}
+
+// -----------------------------------------------------------------------------
+// ----| compiler |-------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+void compile(const char* src)
+{
+    init_scanner(src);
+
+    int line = -1;
+    while(true)
+    {
+        token_t token = scan_token();
+        if (token.line != line)
+        {
+            printf("%4d ", token.line);
+            line = token.line;
+        }
+        else
+        {
+            printf("   | ");
+        }
+        printf("%2d '%.*s'\n", token.type, token.length, token.start); 
+
+        if (token.type == TOKEN_EOF) break;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // ----| vm |-------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
@@ -308,51 +618,101 @@ static interpret_result run(VM* vm)
 #undef BINARY_OP
 }
 
-interpret_result interpret(VM* vm, chunk_t* c)
+interpret_result interpret(VM* vm, const char* src)
 {
-    vm->chunk = c;
-    vm->ip = vm->chunk->code;
+    compile(src);
 
-    return run(vm);
+    return INTERPRET_OK;
 }
 
 
 // -----------------------------------------------------------------------------
 // ----| main |-----------------------------------------------------------------
 // -----------------------------------------------------------------------------
+static void repl(VM* vm)
+{
+    char line[1024];
+
+    while (true)
+    {
+        printf("> ");
+
+        if (!fgets(line, sizeof(line), stdin))
+        {
+            printf("\n");
+            break;
+        }
+
+        interpret(vm, line);
+    }
+}
+
+static char* read_file(const char* path)
+{
+    FILE* file = fopen(path, "rb");
+
+    if (file == NULL)
+    {
+        fprintf(stderr, "Could not open file \"%s\".\n", path);
+        exit(74);
+    }
+
+    fseek(file, 0L, SEEK_END);
+    size_t fileSize = ftell(file);
+    rewind(file);
+
+    char* buffer = (char*)malloc(fileSize + 1);
+
+    if (buffer == NULL)
+    {
+        fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
+        exit(74);
+    }
+
+    size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+
+    if (bytesRead < fileSize)
+    {
+        fprintf(stderr, "Could not read file \"%s\".\n", path);
+        exit(74);
+    }
+
+    buffer[bytesRead] = '\0';
+
+    fclose(file);
+    return buffer;
+}
+
+static void run_file(VM* vm, const char* path)
+{
+    char* source = read_file(path);
+    interpret_result result = interpret(vm, source);
+    free(source);
+
+    if (result == INTERPRET_COMPILE_ERROR) exit(65);
+    if (result == INTERPRET_RUNTIME_ERROR) exit(70);
+}
+
 
 int main(int argc, const char* argv[]) 
 {
     VM vm;
     init_VM(&vm);
 
-    chunk_t chunk;
-    init_chunk(&chunk);
+    if (argc == 1)
+    {
+        repl(&vm);
+    }
+    else if (argc == 2)
+    {
+        run_file(&vm, argv[1]);
+    }
+    else
+    {
+        fprintf(stderr, "Usage: sagittarius [path]\n");
+    }
 
-    int constant = add_constant(&chunk, 1.2);
-    write_chunk(&chunk, OP_CONSTANT, 123);
-    write_chunk(&chunk, constant, 123);
-
-    constant = add_constant(&chunk, 3.4);    
-    write_chunk(&chunk, OP_CONSTANT, 123);   
-    write_chunk(&chunk, constant, 123);
-
-    write_chunk(&chunk, OP_ADD, 123);        
-
-    constant = add_constant(&chunk, 5.6);    
-    write_chunk(&chunk, OP_CONSTANT, 123);   
-    write_chunk(&chunk, constant, 123);      
-
-    write_chunk(&chunk, OP_DIVIDE, 123);     
-
-    write_chunk(&chunk, OP_NEGATE, 123);  
-
-    write_chunk(&chunk, OP_RETURN, 123);
-    disassemble_chunk(&chunk, "test chunk");
-
-    interpret(&vm, &chunk);
 
     free_VM(&vm);
-    free_chunk(&chunk);
     return 0;
 }
