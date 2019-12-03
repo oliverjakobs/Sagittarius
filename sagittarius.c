@@ -29,182 +29,28 @@ bool is_alpha(char c)
 // ----| typedefs |-------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// object types
+typedef struct _value value_t;
+typedef struct _value_array value_array_t;
+
 typedef struct _obj obj_t;
 typedef struct _obj_string obj_string_t;
 
-// value_t
-typedef enum
-{
-    VAL_BOOL,
-    VAL_NIL,
-    VAL_NUMBER,
-    VAL_OBJ
-} value_type;
+typedef struct _chunk chunk_t;
 
-typedef struct
-{
-    value_type type;
-    union
-    {
-        bool boolean;
-        double number;
-        obj_t* obj;
-    } as;
-} value_t;
+typedef struct _token token_t;
+typedef struct _scanner scanner_t;
 
-// value_array_t
-typedef struct
-{
-    int capacity;
-    int count;
-    value_t* values;
-} value_array_t;
+typedef struct _virtual_machine VM;
 
-// objects
-typedef enum
-{
-    OBJ_STRING,
-} obj_type;
+typedef struct _parser parser_t;
+typedef struct _parse_rule parse_rule_t;
 
-struct _obj
-{
-    obj_type type;
-    struct _obj* next;
-};
+// forward declarations
+void _obj_free(obj_t* object);
+obj_t* _obj_get_next(obj_t* object);
 
-struct _obj_string
-{
-    obj_t obj;
-    int length;
-    char* chars;
-};
-
-// operator codes
-typedef enum
-{
-    OP_CONSTANT,
-    OP_NIL,
-    OP_TRUE,
-    OP_FALSE,
-    OP_EQUAL,
-    OP_GREATER,
-    OP_LESS,
-    OP_ADD,
-    OP_SUBTRACT,
-    OP_MULTIPLY,
-    OP_DIVIDE,
-    OP_NOT,
-    OP_NEGATE,
-    OP_RETURN,
-} op_code;
-
-// chunk_t
-typedef struct
-{
-    int count;
-    int capacity;
-    uint8_t* code;
-    int* lines;
-    value_array_t constants;
-} chunk_t;
-
-// token_t
-typedef enum
-{
-    // Single-character tokens.
-    TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
-    TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
-    TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
-    TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
-
-    // One or two character tokens.
-    TOKEN_BANG, TOKEN_BANG_EQUAL,
-    TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,
-    TOKEN_GREATER, TOKEN_GREATER_EQUAL,
-    TOKEN_LESS, TOKEN_LESS_EQUAL,
-
-    // Literals.
-    TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,
-
-    // Keywords.
-    TOKEN_AND, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE,
-    TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
-    TOKEN_PRINT, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
-    TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE,
-
-    TOKEN_ERROR,
-    TOKEN_EOF
-} token_type;
-
-typedef struct
-{
-    token_type type;
-    const char* start;
-    int length;
-    int line;
-} token_t;
-
-// scanner_t
-typedef struct
-{
-  const char* start;
-  const char* current;
-  int line;
-} scanner_t;
-
-// virtual machine
-typedef struct
-{
-    chunk_t* chunk;
-    uint8_t* ip;
-    value_t stack[STACK_MAX];
-    value_t* stack_top;
-
-    obj_t* objects;
-} VM;
-
-// parser_t
-typedef struct
-{
-    token_t current;
-    token_t previous;
-    bool had_error;
-    bool panic_mode;
-} parser_t;
-
-typedef enum
-{
-    PREC_NONE,
-    PREC_ASSIGNMENT,    // =
-    PREC_OR,            // or
-    PREC_AND,           // and
-    PREC_EQUALITY,      // == !=
-    PREC_COMPARISON,    // < > <= >=
-    PREC_TERM,          // + -
-    PREC_FACTOR,        // * /
-    PREC_UNARY,         // ! -
-    PREC_CALL,          // . ()
-    PREC_PRIMARY
-} precedence;
-
-typedef void (*parse_fn)(VM* vm, parser_t* parser);
-
-typedef struct
-{
-    parse_fn prefix;
-    parse_fn infix;
-    precedence precedence;
-} parse_rule_t;
-
-
-typedef enum
-{
-    INTERPRET_OK,
-    INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR
-} interpret_result; 
-
+void _vm_set_objects(VM* vm, obj_t* objects);
+obj_t* _vm_get_objects(VM* vm);
 
 // -----------------------------------------------------------------------------
 // ----| Memory |---------------------------------------------------------------
@@ -240,27 +86,13 @@ void* reallocate(void* previous, size_t oldSize, size_t newSize)
     return realloc(previous, newSize);
 }
 
-void _free_object(obj_t* object)
-{
-    switch (object->type)
-    {
-    case OBJ_STRING: 
-    {
-        obj_string_t* string = (obj_string_t*)object;
-        FREE_ARRAY(char, string->chars, string->length + 1);
-        FREE(obj_string_t, object);
-        break;
-    }
-    }
-}
-
 void free_objects(VM* vm)
 {
-    obj_t* object = vm->objects;
+    obj_t* object = _vm_get_objects(vm);
     while (object != NULL)
     { 
-        obj_t* next = object->next;
-        _free_object(object);
+        obj_t* next = _obj_get_next(object);
+        _obj_free(object);
         object = next;
     }
 }
@@ -268,6 +100,34 @@ void free_objects(VM* vm)
 // -----------------------------------------------------------------------------
 // ----| Value |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
+
+// value_t
+typedef enum
+{
+    VAL_BOOL,
+    VAL_NIL,
+    VAL_NUMBER,
+    VAL_OBJ
+} value_type;
+
+struct _value
+{
+    value_type type;
+    union
+    {
+        bool boolean;
+        double number;
+        obj_t* obj;
+    } as;
+};
+
+// value_array_t
+struct _value_array
+{
+    int capacity;
+    int count;
+    value_t* values;
+};
 
 #define IS_BOOL(value)      ((value).type == VAL_BOOL)
 #define IS_NIL(value)       ((value).type == VAL_NIL)
@@ -312,16 +172,53 @@ void value_array_write(value_array_t* array, value_t v)
 // ----| Object |---------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+typedef enum
+{
+    OBJ_STRING,
+} obj_type;
+
+struct _obj
+{
+    obj_type type;
+    struct _obj* next;
+};
+
+struct _obj_string
+{
+    obj_t obj;
+    int length;
+    char* chars;
+};
+
 #define ALLOCATE_OBJ(vm, type, object_type) (type*)_obj_allocate(vm, sizeof(type), object_type)
+
+obj_t* _obj_get_next(obj_t* object)
+{
+    return object->next;
+}
 
 obj_t* _obj_allocate(VM* vm, size_t size, obj_type type)
 {
     obj_t* object = (obj_t*)reallocate(NULL, 0, size);
     object->type = type;
-    object->next = vm->objects;
-    vm->objects = object;  
+    object->next = _vm_get_objects(vm);
+    _vm_set_objects(vm, object);
 
     return object;
+}
+
+void _obj_free(obj_t* object)
+{
+    switch (object->type)
+    {
+    case OBJ_STRING: 
+    {
+        obj_string_t* string = (obj_string_t*)object;
+        FREE_ARRAY(char, string->chars, string->length + 1);
+        FREE(obj_string_t, object);
+        break;
+    }
+    }
 }
 
 obj_string_t* _obj_allocate_string(VM* vm, char* chars, int length)
@@ -408,42 +305,69 @@ void print_value(value_t value)
 // ----| Chunk |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-void chunk_init(chunk_t* c)
+typedef enum
 {
-    c->count = 0;
-    c->capacity = 0;
-    c->code = NULL;
-    c->lines = NULL;
-    value_array_init(&c->constants);
+    OP_CONSTANT,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
+    OP_ADD,
+    OP_SUBTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
+    OP_NOT,
+    OP_NEGATE,
+    OP_RETURN,
+} op_code;
+
+struct _chunk
+{
+    int count;
+    int capacity;
+    uint8_t* code;
+    int* lines;
+    value_array_t constants;
+};
+
+void chunk_init(chunk_t* chunk)
+{
+    chunk->count = 0;
+    chunk->capacity = 0;
+    chunk->code = NULL;
+    chunk->lines = NULL;
+    value_array_init(&chunk->constants);
 }
 
-void chunk_free(chunk_t* c)
+void chunk_free(chunk_t* chunk)
 {
-    FREE_ARRAY(uint8_t, c->code, c->capacity);
-    FREE_ARRAY(int, c->lines, c->capacity);
-    value_array_free(&c->constants);
-    chunk_init(c);
+    FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
+    FREE_ARRAY(int, chunk->lines, chunk->capacity);
+    value_array_free(&chunk->constants);
+    chunk_init(chunk);
 }
 
-void chunk_write(chunk_t* c, uint8_t byte, int line)
+void chunk_write(chunk_t* chunk, uint8_t byte, int line)
 {
-    if (c->capacity < c->count + 1)
+    if (chunk->capacity < chunk->count + 1)
     {
-        int old_capacity = c->capacity;
-        c->capacity = GROW_CAPACITY(old_capacity);
-        c->code = GROW_ARRAY(c->code, uint8_t, old_capacity, c->capacity);
-        c->lines = GROW_ARRAY(c->lines, int, old_capacity, c->capacity);
+        int old_capacity = chunk->capacity;
+        chunk->capacity = GROW_CAPACITY(old_capacity);
+        chunk->code = GROW_ARRAY(chunk->code, uint8_t, old_capacity, chunk->capacity);
+        chunk->lines = GROW_ARRAY(chunk->lines, int, old_capacity, chunk->capacity);
     }
 
-    c->code[c->count] = byte;
-    c->lines[c->count] = line;
-    c->count++;
+    chunk->code[chunk->count] = byte;
+    chunk->lines[chunk->count] = line;
+    chunk->count++;
 }
 
-int chunk_add_constant(chunk_t* c, value_t v)
+int chunk_add_constant(chunk_t* chunk, value_t value)
 {
-    value_array_write(&c->constants, v);
-    return c->constants.count - 1;
+    value_array_write(&chunk->constants, value);
+    return chunk->constants.count - 1;
 }
 
 // -----------------------------------------------------------------------------
@@ -455,31 +379,31 @@ int _simple_instruction(const char* name, int offset)
     return offset + 1;
 }
 
-int _constant_instruction(const char* name, chunk_t* c, int offset)
+int _constant_instruction(const char* name, chunk_t* chunk, int offset)
 {
-    uint8_t constant = c->code[offset + 1];
+    uint8_t constant = chunk->code[offset + 1];
     printf("%-16s %4d '", name, constant);
-    print_value(c->constants.values[constant]);
+    print_value(chunk->constants.values[constant]);
     printf("'\n");
     return offset + 2;
 }
 
-int disassemble_instruction(chunk_t* c, int offset)
+int disassemble_instruction(chunk_t* chunk, int offset)
 {
     printf("%04d ", offset);
-    if (offset > 0 && c->lines[offset] == c->lines[offset - 1])
+    if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
     {
         printf("   | ");
     }
     else
     {
-        printf("%4d ", c->lines[offset]);
+        printf("%4d ", chunk->lines[offset]);
     } 
 
-    uint8_t instruction = c->code[offset];
+    uint8_t instruction = chunk->code[offset];
     switch (instruction)
     {
-    case OP_CONSTANT:   return _constant_instruction("OP_CONSTANT", c, offset);
+    case OP_CONSTANT:   return _constant_instruction("OP_CONSTANT", chunk, offset);
     case OP_NIL:        return _simple_instruction("OP_NIL", offset);
     case OP_TRUE:       return _simple_instruction("OP_TRUE", offset);
     case OP_FALSE:      return _simple_instruction("OP_FALSE", offset);
@@ -499,19 +423,61 @@ int disassemble_instruction(chunk_t* c, int offset)
     }
 }
 
-void disassemble_chunk(chunk_t* c, const char* name) 
+void disassemble_chunk(chunk_t* chunk, const char* name) 
 {
     printf("== %s ==\n", name);
 
-    for (int offset = 0; offset < c->count;) 
+    for (int offset = 0; offset < chunk->count;) 
     {
-        offset = disassemble_instruction(c, offset);
+        offset = disassemble_instruction(chunk, offset);
     }
 }
 
 // -----------------------------------------------------------------------------
 // ----| scanner |--------------------------------------------------------------
 // -----------------------------------------------------------------------------
+
+typedef enum
+{
+    // Single-character tokens.
+    TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
+    TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
+    TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
+    TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
+
+    // One or two character tokens.
+    TOKEN_BANG, TOKEN_BANG_EQUAL,
+    TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,
+    TOKEN_GREATER, TOKEN_GREATER_EQUAL,
+    TOKEN_LESS, TOKEN_LESS_EQUAL,
+
+    // Literals.
+    TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,
+
+    // Keywords.
+    TOKEN_AND, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE,
+    TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
+    TOKEN_PRINT, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
+    TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE,
+
+    TOKEN_ERROR,
+    TOKEN_EOF
+} token_type;
+
+struct _token
+{
+    token_type type;
+    const char* start;
+    int length;
+    int line;
+};
+
+struct _scanner
+{
+  const char* start;
+  const char* current;
+  int line;
+};
 
 scanner_t scanner;
 
@@ -743,6 +709,38 @@ token_t token_scan()
 // -----------------------------------------------------------------------------
 // ----| compiler |-------------------------------------------------------------
 // -----------------------------------------------------------------------------
+
+struct _parser
+{
+    token_t current;
+    token_t previous;
+    bool had_error;
+    bool panic_mode;
+};
+
+typedef enum
+{
+    PREC_NONE,
+    PREC_ASSIGNMENT,    // =
+    PREC_OR,            // or
+    PREC_AND,           // and
+    PREC_EQUALITY,      // == !=
+    PREC_COMPARISON,    // < > <= >=
+    PREC_TERM,          // + -
+    PREC_FACTOR,        // * /
+    PREC_UNARY,         // ! -
+    PREC_CALL,          // . ()
+    PREC_PRIMARY
+} precedence;
+
+typedef void (*parse_fn)(VM* vm, parser_t* parser);
+
+struct _parse_rule
+{
+    parse_fn prefix;
+    parse_fn infix;
+    precedence precedence;
+};
 
 parse_rule_t* parser_get_rule(token_type type);
 
@@ -1026,6 +1024,33 @@ bool compile(VM* vm, const char* src, chunk_t* chunk)
 // -----------------------------------------------------------------------------
 
 #include <stdarg.h>
+
+struct _virtual_machine
+{
+    chunk_t* chunk;
+    uint8_t* ip;
+    value_t stack[STACK_MAX];
+    value_t* stack_top;
+
+    obj_t* objects;
+};
+
+void _vm_set_objects(VM* vm, obj_t* objects)
+{
+    vm->objects = objects;
+}
+
+obj_t* _vm_get_objects(VM* vm)
+{
+    return vm->objects;
+}
+
+typedef enum
+{
+    INTERPRET_OK,
+    INTERPRET_COMPILE_ERROR,
+    INTERPRET_RUNTIME_ERROR
+} interpret_result;
 
 static void vm_reset_stack(VM* vm)
 {
