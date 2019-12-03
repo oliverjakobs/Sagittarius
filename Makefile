@@ -1,2 +1,2 @@
-sagittarius: sagittarius.c
-	gcc sagittarius.c -o sagittarius -Wall -std=c99
+clockwork: clockwork.c
+	gcc clockwork.c -o cw -Wall -std=c99

@@ -1,3 +1,9 @@
+// -----------------------------------------------------------------------------
+// ----| Version |--------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+#define VERSION_MAJOR   0
+#define VERSION_MINOR   1
 
 // -----------------------------------------------------------------------------
 // ----| Common |---------------------------------------------------------------
@@ -29,6 +35,9 @@ bool is_alpha(char c)
 // ----| typedefs |-------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+typedef struct _table table_t;
+typedef struct _table_entry table_entry_t;
+
 typedef struct _value value_t;
 typedef struct _value_array value_array_t;
 
@@ -45,12 +54,16 @@ typedef struct _virtual_machine VM;
 typedef struct _parser parser_t;
 typedef struct _parse_rule parse_rule_t;
 
-// forward declarations
-void _obj_free(obj_t* object);
-obj_t* _obj_get_next(obj_t* object);
+// -----------------------------------------------------------------------------
+// ----| forward declarations |-------------------------------------------------
+// -----------------------------------------------------------------------------
 
-void _vm_set_objects(VM* vm, obj_t* objects);
-obj_t* _vm_get_objects(VM* vm);
+void vm_objects_set(VM* vm, obj_t* objects);
+obj_t* vm_objects_get(VM* vm);
+table_t* vm_strings_get(VM* vm);
+
+bool table_set(table_t* table, obj_string_t* key, value_t value);
+obj_string_t* table_find_string(table_t* table, const char* chars, int length, uint32_t hash);
 
 // -----------------------------------------------------------------------------
 // ----| Memory |---------------------------------------------------------------
@@ -84,17 +97,6 @@ void* reallocate(void* previous, size_t oldSize, size_t newSize)
     }
 
     return realloc(previous, newSize);
-}
-
-void free_objects(VM* vm)
-{
-    obj_t* object = _vm_get_objects(vm);
-    while (object != NULL)
-    { 
-        obj_t* next = _obj_get_next(object);
-        _obj_free(object);
-        object = next;
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -188,6 +190,7 @@ struct _obj_string
     obj_t obj;
     int length;
     char* chars;
+    uint32_t hash;
 };
 
 #define ALLOCATE_OBJ(vm, type, object_type) (type*)_obj_allocate(vm, sizeof(type), object_type)
@@ -201,8 +204,8 @@ obj_t* _obj_allocate(VM* vm, size_t size, obj_type type)
 {
     obj_t* object = (obj_t*)reallocate(NULL, 0, size);
     object->type = type;
-    object->next = _vm_get_objects(vm);
-    _vm_set_objects(vm, object);
+    object->next = vm_objects_get(vm);
+    vm_objects_set(vm, object);
 
     return object;
 }
@@ -221,27 +224,58 @@ void _obj_free(obj_t* object)
     }
 }
 
-obj_string_t* _obj_allocate_string(VM* vm, char* chars, int length)
+// FNV-1a hash function
+uint32_t _obj_string_hash(const char* key, int length)
+{
+    uint32_t hash = 2166136261u;
+
+    for (int i = 0; i < length; i++)
+    {
+        hash ^= key[i];
+        hash *= 16777619;
+    }
+
+    return hash;
+}
+
+obj_string_t* _obj_allocate_string(VM* vm, char* chars, int length, uint32_t hash)
 {
     obj_string_t* string = ALLOCATE_OBJ(vm, obj_string_t, OBJ_STRING);
     string->length = length;
     string->chars = chars;
+    string->hash = hash;
+
+    table_set(vm_strings_get(vm), string, NIL_VAL);
 
     return string;
 }
 
 obj_string_t* obj_string_move(VM* vm, char* chars, int length)
 {
-    return _obj_allocate_string(vm, chars, length);
+    uint32_t hash = _obj_string_hash(chars, length);
+    obj_string_t* interned = table_find_string(vm_strings_get(vm), chars, length, hash);
+    if (interned != NULL)
+    {
+        FREE_ARRAY(char, chars, length + 1);
+        return interned;
+    }
+
+    return _obj_allocate_string(vm, chars, length, hash);
 }
 
 obj_string_t* obj_string_copy(VM* vm, const char* chars, int length) 
 {
+    uint32_t hash = _obj_string_hash(chars, length);
+
+    obj_string_t* interned = table_find_string(vm_strings_get(vm), chars, length, hash);
+
+    if (interned != NULL) return interned;
+
     char* heap_chars = ALLOCATE(char, length + 1);
     memcpy(heap_chars, chars, length);
     heap_chars[length] = '\0';
 
-    return _obj_allocate_string(vm, heap_chars, length);
+    return _obj_allocate_string(vm, heap_chars, length, hash);
 }
 
 bool obj_is_type(value_t value, obj_type type)
@@ -269,12 +303,7 @@ bool values_equal(value_t a, value_t b)
     case VAL_BOOL:      return AS_BOOL(a) == AS_BOOL(b);
     case VAL_NIL:       return true;
     case VAL_NUMBER:    return AS_NUMBER(a) == AS_NUMBER(b);
-    case VAL_OBJ:
-    {
-        obj_string_t* str_a = AS_STRING(a);
-        obj_string_t* str_b = AS_STRING(b);
-        return str_a->length == str_b->length && memcmp(str_a->chars, str_b->chars, str_a->length) == 0;
-    }
+    case VAL_OBJ:       return AS_OBJ(a) == AS_OBJ(b);
     }
 
     return false;
@@ -302,6 +331,168 @@ void print_value(value_t value)
 }
 
 // -----------------------------------------------------------------------------
+// ----| Table |----------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+struct _table_entry
+{
+    obj_string_t* key;
+    value_t value;
+};
+
+struct _table
+{
+    int count;
+    int capacity;
+    table_entry_t* entries;
+};
+
+#define TABLE_MAX_LOAD 0.75
+
+void table_init(table_t* table)
+{
+    table->count = 0;
+    table->capacity = 0;
+    table->entries = NULL;
+}
+
+void table_free(table_t* table)
+{
+    FREE_ARRAY(table_entry_t, table->entries, table->capacity);
+    table_init(table);
+}
+
+table_entry_t* _entry_find(table_entry_t* entries, int capacity, obj_string_t* key)
+{
+    uint32_t index = key->hash % capacity;
+    table_entry_t* tombstone = NULL;
+
+    while (true)
+    {
+        table_entry_t* entry = &entries[index];
+
+        if (entry->key == NULL)
+        {
+            if (IS_NIL(entry->value)) // Empty entry
+                return tombstone != NULL ? tombstone : entry;
+            else // We found a tombstone.
+                if (tombstone == NULL) tombstone = entry;
+        }
+        else if (entry->key == key) // We found the key.
+        {
+            return entry;
+        }
+
+        index = (index + 1) % capacity;
+    }
+}
+
+void _table_adjust_capacity(table_t* table, int capacity)
+{
+    table_entry_t* entries = ALLOCATE(table_entry_t, capacity);
+    for (int i = 0; i < capacity; i++)
+    {
+        entries[i].key = NULL;
+        entries[i].value = NIL_VAL;
+    }
+
+    table->count = 0;
+    for (int i = 0; i < table->capacity; i++)
+    {
+        table_entry_t* entry = &table->entries[i];
+        if (entry->key == NULL) continue;
+
+        table_entry_t* dest = _entry_find(entries, capacity, entry->key);
+        dest->key = entry->key;
+        dest->value = entry->value;
+        table->count++;
+    }
+
+    FREE_ARRAY(table_entry_t, table->entries, table->capacity);
+    table->entries = entries;
+    table->capacity = capacity;
+}
+
+bool table_set(table_t* table, obj_string_t* key, value_t value)
+{
+    if (table->count + 1 > table->capacity * TABLE_MAX_LOAD)
+    {
+        int capacity = GROW_CAPACITY(table->capacity);
+        _table_adjust_capacity(table, capacity);
+    }
+
+    table_entry_t* entry = _entry_find(table->entries, table->capacity, key);
+
+    bool is_new_key = entry->key == NULL;
+    if (is_new_key && IS_NIL(entry->value)) table->count++;
+
+    entry->key = key;
+    entry->value = value;
+    return is_new_key;
+}
+
+void table_copy(table_t* from, table_t* to)
+{
+    for (int i = 0; i < from->capacity; i++)
+    {
+        table_entry_t* entry = &from->entries[i];
+        if (entry->key != NULL)
+            table_set(to, entry->key, entry->value);
+    }
+}
+
+obj_string_t* table_find_string(table_t* table, const char* chars, int length, uint32_t hash)
+{
+    if (table->count == 0) return NULL;
+
+    uint32_t index = hash % table->capacity;
+
+    while (true)
+    {
+        table_entry_t* entry = &table->entries[index];
+
+        if (entry->key == NULL)
+        {
+            // Stop if we find an empty non-tombstone entry.
+            if (IS_NIL(entry->value)) return NULL;
+        }
+        else if (entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length) == 0)
+        {              
+            // We found it.
+            return entry->key;
+        }
+
+        index = (index + 1) % table->capacity;
+    }
+}
+
+bool table_get(table_t* table, obj_string_t* key, value_t* value)
+{
+    if (table->count == 0) return false;
+
+    table_entry_t* entry = _entry_find(table->entries, table->capacity, key);
+    if (entry->key == NULL) return false;
+
+    *value = entry->value;
+    return true;
+}
+
+bool table_delete(table_t* table, obj_string_t* key)
+{
+    if (table->count == 0) return false;
+
+    // Find the entry.
+    table_entry_t* entry = _entry_find(table->entries, table->capacity, key);
+     if (entry->key == NULL) return false;
+
+    // Place a tombstone in the entry.
+    entry->key = NULL;
+    entry->value = BOOL_VAL(true);
+
+    return true;
+}
+
+// -----------------------------------------------------------------------------
 // ----| Chunk |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
@@ -311,6 +502,10 @@ typedef enum
     OP_NIL,
     OP_TRUE,
     OP_FALSE,
+    OP_POP,
+    OP_GET_GLOBAL,
+    OP_DEFINE_GLOBAL,
+    OP_SET_GLOBAL,
     OP_EQUAL,
     OP_GREATER,
     OP_LESS,
@@ -320,6 +515,7 @@ typedef enum
     OP_DIVIDE,
     OP_NOT,
     OP_NEGATE,
+    OP_PRINT,
     OP_RETURN,
 } op_code;
 
@@ -403,20 +599,25 @@ int disassemble_instruction(chunk_t* chunk, int offset)
     uint8_t instruction = chunk->code[offset];
     switch (instruction)
     {
-    case OP_CONSTANT:   return _constant_instruction("OP_CONSTANT", chunk, offset);
-    case OP_NIL:        return _simple_instruction("OP_NIL", offset);
-    case OP_TRUE:       return _simple_instruction("OP_TRUE", offset);
-    case OP_FALSE:      return _simple_instruction("OP_FALSE", offset);
-    case OP_EQUAL:      return _simple_instruction("OP_EQUAL", offset);
-    case OP_GREATER:    return _simple_instruction("OP_GREATER", offset);
-    case OP_LESS:       return _simple_instruction("OP_LESS", offset);
-    case OP_ADD:        return _simple_instruction("OP_ADD", offset);
-    case OP_SUBTRACT:   return _simple_instruction("OP_SUBTRACT", offset);
-    case OP_MULTIPLY:   return _simple_instruction("OP_MULTIPLY", offset);
-    case OP_DIVIDE:     return _simple_instruction("OP_DIVIDE", offset);
-    case OP_NOT:        return _simple_instruction("OP_NOT", offset);
-    case OP_NEGATE:     return _simple_instruction("OP_NEGATE", offset);
-    case OP_RETURN:     return _simple_instruction("OP_RETURN", offset);
+    case OP_CONSTANT:       return _constant_instruction("OP_CONSTANT", chunk, offset);
+    case OP_NIL:            return _simple_instruction("OP_NIL", offset);
+    case OP_TRUE:           return _simple_instruction("OP_TRUE", offset);
+    case OP_FALSE:          return _simple_instruction("OP_FALSE", offset);
+    case OP_POP:            return _simple_instruction("OP_POP", offset);
+    case OP_GET_GLOBAL:     return _constant_instruction("OP_GET_GLOBAL", chunk, offset);
+    case OP_DEFINE_GLOBAL:  return _constant_instruction("OP_DEFINE_GLOBAL", chunk, offset);
+    case OP_SET_GLOBAL:     return _constant_instruction("OP_SET_GLOBAL", chunk, offset);
+    case OP_EQUAL:          return _simple_instruction("OP_EQUAL", offset);
+    case OP_GREATER:        return _simple_instruction("OP_GREATER", offset);
+    case OP_LESS:           return _simple_instruction("OP_LESS", offset);
+    case OP_ADD:            return _simple_instruction("OP_ADD", offset);
+    case OP_SUBTRACT:       return _simple_instruction("OP_SUBTRACT", offset);
+    case OP_MULTIPLY:       return _simple_instruction("OP_MULTIPLY", offset);
+    case OP_DIVIDE:         return _simple_instruction("OP_DIVIDE", offset);
+    case OP_NOT:            return _simple_instruction("OP_NOT", offset);
+    case OP_NEGATE:         return _simple_instruction("OP_NEGATE", offset);
+    case OP_PRINT:          return _simple_instruction("OP_PRINT", offset); 
+    case OP_RETURN:         return _simple_instruction("OP_RETURN", offset);
     default:    
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;
@@ -733,7 +934,7 @@ typedef enum
     PREC_PRIMARY
 } precedence;
 
-typedef void (*parse_fn)(VM* vm, parser_t* parser);
+typedef void (*parse_fn)(VM* vm, parser_t* parser, bool can_assign);
 
 struct _parse_rule
 {
@@ -772,8 +973,8 @@ static void parser_error_at(parser_t* parser, token_t* token, const char* messag
         fprintf(stderr, " at '%.*s'", token->length, token->start);
     }
 
-    fprintf(stderr, ": %s\n", message);                          
-    parser->had_error = true;                                      
+    fprintf(stderr, ": %s\n", message);
+    parser->had_error = true;
 }
 
 static void parser_error_at_current(parser_t* parser, const char* message)
@@ -810,6 +1011,20 @@ void parser_consume(parser_t* parser, token_type type, const char* message)
     parser_error_at_current(parser, message); 
 }
 
+bool parser_check(parser_t* parser, token_type type)
+{
+    return parser->current.type == type;
+}
+
+bool parser_match(parser_t* parser, token_type type)
+{
+    if (!parser_check(parser, type)) return false;
+
+    parser_advance(parser);
+
+    return true;
+}
+
 void parser_emit_byte(parser_t* parser, uint8_t byte)
 {
     chunk_write(current_chunk(), byte, parser->previous.line);
@@ -839,9 +1054,25 @@ uint8_t parser_make_constant(parser_t* parser, value_t value)
     return (uint8_t)constant;
 }
 
+uint8_t _parser_make_constant_indentifier(VM* vm, parser_t* parser, token_t* name)
+{
+    return parser_make_constant(parser, OBJ_VAL(obj_string_copy(vm, name->start, name->length)));
+}
+
+uint8_t parser_make_variable(VM* vm, parser_t* parser, const char* error_message)
+{
+    parser_consume(parser, TOKEN_IDENTIFIER, error_message);
+    return _parser_make_constant_indentifier(vm, parser, &parser->previous);
+}
+
 void parser_emit_constant(parser_t* parser, value_t value)
 {
     parser_emit_bytes(parser, OP_CONSTANT, parser_make_constant(parser, value));
+}
+
+void parser_define_variable(parser_t* parser, uint8_t global)
+{
+    parser_emit_bytes(parser, OP_DEFINE_GLOBAL, global);
 }
 
 static void end_compiler(parser_t* parser)
@@ -855,7 +1086,34 @@ static void end_compiler(parser_t* parser)
 #endif
 }
 
-void parse_precedence(VM* vm, parser_t* parser, precedence p)
+void parser_synchronize(parser_t* parser)
+{
+    parser->panic_mode = false;
+
+    while (parser->current.type != TOKEN_EOF)
+    {
+        if (parser->previous.type == TOKEN_SEMICOLON) return;
+
+        switch (parser->current.type)
+        {
+        case TOKEN_CLASS:
+        case TOKEN_FUN:
+        case TOKEN_VAR:
+        case TOKEN_FOR:
+        case TOKEN_IF:
+        case TOKEN_WHILE:
+        case TOKEN_PRINT:
+        case TOKEN_RETURN:
+            return;
+        default:
+            break; // Do nothing.
+        }
+        parser_advance(parser);
+    }
+}
+
+// -----------------------------------------------------------------------------
+void parse_precedence(VM* vm, parser_t* parser, precedence pre)
 {
     parser_advance(parser);
 
@@ -867,25 +1125,18 @@ void parse_precedence(VM* vm, parser_t* parser, precedence p)
         return;
     }
 
-    prefix_rule(vm, parser);
+    bool can_assign = pre <= PREC_ASSIGNMENT;
+    prefix_rule(vm, parser, can_assign);
 
-    while (p <= parser_get_rule(parser->current.type)->precedence)
+    while (pre <= parser_get_rule(parser->current.type)->precedence)
     {
         parser_advance(parser);
         parse_fn infix_rule = parser_get_rule(parser->previous.type)->infix;
-        infix_rule(vm, parser);
+        infix_rule(vm, parser, can_assign);
     }
-}
 
-void parse_number(VM* vm, parser_t* parser)
-{
-    double value = strtod(parser->previous.start, NULL);
-    parser_emit_constant(parser, NUMBER_VAL(value));
-}
-
-void parse_string(VM* vm, parser_t* parser)
-{
-    parser_emit_constant(parser, OBJ_VAL(obj_string_copy(vm, parser->previous.start + 1, parser->previous.length - 2)));
+    if (can_assign && parser_match(parser, TOKEN_EQUAL))
+        parser_error(parser, "Invalid assignment target.");
 }
 
 void parse_expression(VM* vm, parser_t* parser)
@@ -893,13 +1144,91 @@ void parse_expression(VM* vm, parser_t* parser)
     parse_precedence(vm, parser, PREC_ASSIGNMENT);
 }
 
-void parse_grouping(VM* vm, parser_t* parser)
+void parse_number(VM* vm, parser_t* parser, bool can_assign)
+{
+    double value = strtod(parser->previous.start, NULL);
+    parser_emit_constant(parser, NUMBER_VAL(value));
+}
+
+void parse_string(VM* vm, parser_t* parser, bool can_assign)
+{
+    parser_emit_constant(parser, OBJ_VAL(obj_string_copy(vm, parser->previous.start + 1, parser->previous.length - 2)));
+}
+
+void parse_variable_named(VM* vm, parser_t* parser, token_t name, bool can_assign)
+{
+    uint8_t arg = _parser_make_constant_indentifier(vm, parser, &name);
+
+    if (can_assign && parser_match(parser, TOKEN_EQUAL))
+    {
+        parse_expression(vm, parser);
+        parser_emit_bytes(parser, OP_SET_GLOBAL, arg);
+    }
+    else
+    {
+        parser_emit_bytes(parser, OP_GET_GLOBAL, arg);
+    }
+}
+
+void parse_variable(VM* vm, parser_t* parser, bool can_assign)
+{
+    parse_variable_named(vm, parser, parser->previous, can_assign);
+}
+
+// statements
+void parse_statement_print(VM* vm, parser_t* parser)
+{
+    parse_expression(vm, parser);
+    parser_consume(parser, TOKEN_SEMICOLON, "Expect ';' after value.");
+    parser_emit_byte(parser, OP_PRINT);
+}
+
+void parse_statement_expression(VM* vm, parser_t* parser)
+{
+    parse_expression(vm, parser);
+    parser_consume(parser, TOKEN_SEMICOLON, "Expect ';' after expression.");
+    parser_emit_byte(parser, OP_POP);
+}
+
+void parse_statement(VM* vm, parser_t* parser)
+{
+    if (parser_match(parser, TOKEN_PRINT))
+        parse_statement_print(vm, parser);
+    else
+        parse_statement_expression(vm, parser);
+}
+
+void parse_declaration_var(VM* vm, parser_t* parser)
+{
+    uint8_t global = parser_make_variable(vm, parser, "Expect variable name.");
+
+    if (parser_match(parser, TOKEN_EQUAL))
+        parse_expression(vm, parser);
+    else
+        parser_emit_byte(parser, OP_NIL);
+
+    parser_consume(parser, TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    parser_define_variable(parser, global);
+}
+
+void parse_declaration(VM* vm, parser_t* parser)
+{
+    if (parser_match(parser, TOKEN_VAR))
+        parse_declaration_var(vm, parser);
+    else
+        parse_statement(vm, parser);
+
+    if (parser->panic_mode) parser_synchronize(parser);
+}
+
+void parse_grouping(VM* vm, parser_t* parser, bool can_assign)
 {
     parse_expression(vm, parser);
     parser_consume(parser, TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-void parse_unary(VM* vm, parser_t* parser)
+void parse_unary(VM* vm, parser_t* parser, bool can_assign)
 {
     token_type operatorType = parser->previous.type;
 
@@ -915,7 +1244,7 @@ void parse_unary(VM* vm, parser_t* parser)
     }
 }
 
-void parse_binary(VM* vm, parser_t* parser)
+void parse_binary(VM* vm, parser_t* parser, bool can_assign)
 {
     // Remember the operator.
     token_type operatorType = parser->previous.type;
@@ -941,7 +1270,7 @@ void parse_binary(VM* vm, parser_t* parser)
     }
 }
 
-void parse_literal(VM* vm, parser_t* parser)
+void parse_literal(VM* vm, parser_t* parser, bool can_assign)
 {
     switch (parser->previous.type) 
     {
@@ -973,7 +1302,7 @@ parse_rule_t rules[] =
     { NULL,             parse_binary,   PREC_COMPARISON },  // TOKEN_GREATER_EQUAL
     { NULL,             parse_binary,   PREC_COMPARISON },  // TOKEN_LESS
     { NULL,             parse_binary,   PREC_COMPARISON },  // TOKEN_LESS_EQUAL
-    { NULL,             NULL,           PREC_NONE },        // TOKEN_IDENTIFIER
+    { parse_variable,   NULL,           PREC_NONE },        // TOKEN_IDENTIFIER
     { parse_string,     NULL,           PREC_NONE },        // TOKEN_STRING
     { parse_number,     NULL,           PREC_NONE },        // TOKEN_NUMBER
     { NULL,             NULL,           PREC_NONE },        // TOKEN_AND
@@ -1011,9 +1340,12 @@ bool compile(VM* vm, const char* src, chunk_t* chunk)
     parser.panic_mode = false;
 
     parser_advance(&parser);
-    parse_expression(vm, &parser);
 
-    parser_consume(&parser, TOKEN_EOF, "Expect end of expression.");
+    while(!parser_match(&parser, TOKEN_EOF))
+    {
+        parse_declaration(vm, &parser);
+    }
+
     end_compiler(&parser);
 
     return !parser.had_error;
@@ -1032,17 +1364,35 @@ struct _virtual_machine
     value_t stack[STACK_MAX];
     value_t* stack_top;
 
+    table_t globals;
+    table_t strings;
     obj_t* objects;
 };
 
-void _vm_set_objects(VM* vm, obj_t* objects)
+void vm_objects_free(VM* vm)
+{
+    obj_t* object = vm->objects;
+    while (object != NULL)
+    { 
+        obj_t* next = object->next;
+        _obj_free(object);
+        object = next;
+    }
+}
+
+void vm_objects_set(VM* vm, obj_t* objects)
 {
     vm->objects = objects;
 }
 
-obj_t* _vm_get_objects(VM* vm)
+obj_t* vm_objects_get(VM* vm)
 {
     return vm->objects;
+}
+
+table_t* vm_strings_get(VM* vm)
+{
+    return &vm->strings;
 }
 
 typedef enum
@@ -1076,11 +1426,16 @@ void vm_init(VM* vm)
 {
     vm_reset_stack(vm);
     vm->objects = NULL;
+
+    table_init(&vm->globals);
+    table_init(&vm->strings);
 }
 
 void vm_free(VM* vm)
 {
-    free_objects(vm);
+    table_free(&vm->globals);
+    table_free(&vm->strings);
+    vm_objects_free(vm);
 }
 
 void vm_push(VM* vm, value_t v)
@@ -1119,6 +1474,7 @@ static interpret_result vm_run(VM* vm)
 {
 #define READ_BYTE() (*vm->ip++)
 #define READ_CONSTANT() (vm->chunk->constants.values[READ_BYTE()])
+#define READ_STRING() AS_STRING(READ_CONSTANT())
 
 #define BINARY_OP(vm, type, op)                                     \
     do                                                              \
@@ -1159,6 +1515,37 @@ static interpret_result vm_run(VM* vm)
         case OP_NIL:        vm_push(vm, NIL_VAL); break;
         case OP_TRUE:       vm_push(vm, BOOL_VAL(true)); break;
         case OP_FALSE:      vm_push(vm, BOOL_VAL(false)); break;
+        case OP_POP:        vm_pop(vm); break;
+        case OP_GET_GLOBAL:
+        {
+            obj_string_t* name = READ_STRING();
+            value_t value;
+            if (!table_get(&vm->globals, name, &value))
+            {
+                vm_runtime_error(vm, "Undefined variable '%s'.", name->chars);
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            vm_push(vm, value);
+            break;
+        }
+        case OP_DEFINE_GLOBAL:
+        {
+            obj_string_t* name = READ_STRING();
+            table_set(&vm->globals, name, vm_peek(vm, 0));
+            vm_pop(vm);
+            break;
+        }
+        case OP_SET_GLOBAL:
+        {
+            obj_string_t* name = READ_STRING();
+            if (table_set(&vm->globals, name, vm_peek(vm, 0)))
+            {
+                table_delete(&vm->globals, name); 
+                vm_runtime_error(vm, "Undefined variable '%s'.", name->chars);
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            break;
+        }
         case OP_EQUAL:
         {
             value_t b = vm_pop(vm);
@@ -1200,15 +1587,19 @@ static interpret_result vm_run(VM* vm)
                 return INTERPRET_RUNTIME_ERROR;
             }
             vm_push(vm, NUMBER_VAL(-AS_NUMBER(vm_pop(vm)))); break;
-        case OP_RETURN:
+        case OP_PRINT:
             print_value(vm_pop(vm));
             printf("\n");
+            break;
+        case OP_RETURN:
+            // Exit interpreter.
             return INTERPRET_OK;
         }
     }
 
 #undef READ_BYTE
 #undef READ_CONSTANT
+#undef READ_STRING
 
 #undef BINARY_OP
 }
@@ -1239,11 +1630,13 @@ interpret_result vm_interpret(VM* vm, const char* src)
 // -----------------------------------------------------------------------------
 static void repl(VM* vm)
 {
+    printf("Clockwork v%d.%d\n", VERSION_MAJOR, VERSION_MINOR);
+
     char line[1024];
 
     while (true)
     {
-        printf("> ");
+        printf(">>> ");
 
         if (!fgets(line, sizeof(line), stdin))
         {
@@ -1316,7 +1709,7 @@ int main(int argc, const char* argv[])
     }
     else
     {
-        fprintf(stderr, "Usage: sagittarius [path]\n");
+        fprintf(stderr, "Usage: cw [path]\n");
     }
 
     vm_free(&vm);
