@@ -16,43 +16,44 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <stdarg.h>
+
 #define DEBUG_PRINT_CODE
 #define DEBUG_TRACE_EXECUTION
 
-#define STACK_MAX 256
+#define STACK_MAX       256
+#define UINT8_COUNT     (UINT8_MAX + 1)
 
-bool is_digit(char c)
-{
-    return c >= '0' && c <= '9';
-}
-
-bool is_alpha(char c)
-{
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-}
+bool is_digit(char c) { return c >= '0' && c <= '9'; }
+bool is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 
 // -----------------------------------------------------------------------------
 // ----| typedefs |-------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-typedef struct _table table_t;
-typedef struct _table_entry table_entry_t;
+typedef struct _cw_struct_table         table_t;
+typedef struct _cw_struct_table_entry   table_entry_t;
 
-typedef struct _value value_t;
-typedef struct _value_array value_array_t;
+typedef struct _cw_struct_value         value_t;
+typedef struct _cw_struct_value_array   value_array_t;
 
-typedef struct _obj obj_t;
-typedef struct _obj_string obj_string_t;
+typedef struct _cw_struct_obj           obj_t;
+typedef struct _cw_struct_obj_string    obj_string_t;
 
-typedef struct _chunk chunk_t;
+typedef struct _cw_struct_chunk         chunk_t;
 
-typedef struct _token token_t;
-typedef struct _scanner scanner_t;
+typedef struct _cw_struct_token         token_t;
+typedef struct _cw_struct_scanner       scanner_t;
 
-typedef struct _virtual_machine VM;
+typedef struct _cw_struct_vm            VM;
 
-typedef struct _parser parser_t;
-typedef struct _parse_rule parse_rule_t;
+typedef struct _cw_struct_parser        parser_t;
+typedef struct _cw_struct_parse_rule    parse_rule_t;
+
+typedef struct _cw_struct_local         local_t;
+typedef struct _cw_struct_compiler      compiler_t;
+
+typedef void (*parse_fn)(VM* vm, parser_t* parser, bool can_assign);
 
 // -----------------------------------------------------------------------------
 // ----| forward declarations |-------------------------------------------------
@@ -81,7 +82,7 @@ obj_string_t* table_find_string(table_t* table, const char* chars, int length, u
 #define GROW_ARRAY(previous, type, oldCount, count) (type*)reallocate(previous, sizeof(type) * (oldCount), sizeof(type) * (count))
 #define FREE_ARRAY(type, pointer, oldCount) reallocate(pointer, sizeof(type) * (oldCount), 0)
 
-// the single function for all dynamic memory management
+// The single function for all dynamic memory management
 // The two size arguments passed to reallocate() control which operation to perform:
 // oldSize      newSize                 Operation
 // 0            Non‑zero                Allocate new block.
@@ -95,7 +96,6 @@ void* reallocate(void* previous, size_t oldSize, size_t newSize)
         free(previous);
         return NULL;
     }
-
     return realloc(previous, newSize);
 }
 
@@ -103,7 +103,6 @@ void* reallocate(void* previous, size_t oldSize, size_t newSize)
 // ----| Value |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// value_t
 typedef enum
 {
     VAL_BOOL,
@@ -112,7 +111,7 @@ typedef enum
     VAL_OBJ
 } value_type;
 
-struct _value
+struct _cw_struct_value
 {
     value_type type;
     union
@@ -123,8 +122,7 @@ struct _value
     } as;
 };
 
-// value_array_t
-struct _value_array
+struct _cw_struct_value_array
 {
     int capacity;
     int count;
@@ -179,13 +177,13 @@ typedef enum
     OBJ_STRING,
 } obj_type;
 
-struct _obj
+struct _cw_struct_obj
 {
     obj_type type;
-    struct _obj* next;
+    obj_t* next;
 };
 
-struct _obj_string
+struct _cw_struct_obj_string
 {
     obj_t obj;
     int length;
@@ -228,13 +226,11 @@ void _obj_free(obj_t* object)
 uint32_t _obj_string_hash(const char* key, int length)
 {
     uint32_t hash = 2166136261u;
-
     for (int i = 0; i < length; i++)
     {
         hash ^= key[i];
         hash *= 16777619;
     }
-
     return hash;
 }
 
@@ -246,7 +242,6 @@ obj_string_t* _obj_allocate_string(VM* vm, char* chars, int length, uint32_t has
     string->hash = hash;
 
     table_set(vm_strings_get(vm), string, NIL_VAL);
-
     return string;
 }
 
@@ -259,14 +254,12 @@ obj_string_t* obj_string_move(VM* vm, char* chars, int length)
         FREE_ARRAY(char, chars, length + 1);
         return interned;
     }
-
     return _obj_allocate_string(vm, chars, length, hash);
 }
 
 obj_string_t* obj_string_copy(VM* vm, const char* chars, int length) 
 {
     uint32_t hash = _obj_string_hash(chars, length);
-
     obj_string_t* interned = table_find_string(vm_strings_get(vm), chars, length, hash);
 
     if (interned != NULL) return interned;
@@ -278,21 +271,15 @@ obj_string_t* obj_string_copy(VM* vm, const char* chars, int length)
     return _obj_allocate_string(vm, heap_chars, length, hash);
 }
 
-bool obj_is_type(value_t value, obj_type type)
-{
-    return IS_OBJ(value) && AS_OBJ(value)->type == type;
-}
+bool obj_is_type(value_t value, obj_type type) { return IS_OBJ(value) && AS_OBJ(value)->type == type; }
 
-#define OBJ_TYPE(value)         (AS_OBJ(value)->type)
-#define IS_STRING(value)        obj_is_type(value, OBJ_STRING)
+#define OBJ_TYPE(value)     (AS_OBJ(value)->type)
+#define IS_STRING(value)    obj_is_type(value, OBJ_STRING)
 
-#define AS_STRING(value)        ((obj_string_t*)AS_OBJ(value))
-#define AS_CSTRING(value)       (((obj_string_t*)AS_OBJ(value))->chars)
+#define AS_STRING(value)    ((obj_string_t*)AS_OBJ(value))
+#define AS_CSTRING(value)   (((obj_string_t*)AS_OBJ(value))->chars)
 
-bool is_falsey(value_t v)
-{
-    return IS_NIL(v) || (IS_BOOL(v) && !AS_BOOL(v));
-}
+bool is_falsey(value_t v) { return IS_NIL(v) || (IS_BOOL(v) && !AS_BOOL(v)); }
 
 bool values_equal(value_t a, value_t b)
 {
@@ -334,13 +321,13 @@ void print_value(value_t value)
 // ----| Table |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-struct _table_entry
+struct _cw_struct_table_entry
 {
     obj_string_t* key;
     value_t value;
 };
 
-struct _table
+struct _cw_struct_table
 {
     int count;
     int capacity;
@@ -370,7 +357,6 @@ table_entry_t* _entry_find(table_entry_t* entries, int capacity, obj_string_t* k
     while (true)
     {
         table_entry_t* entry = &entries[index];
-
         if (entry->key == NULL)
         {
             if (IS_NIL(entry->value)) // Empty entry
@@ -382,7 +368,6 @@ table_entry_t* _entry_find(table_entry_t* entries, int capacity, obj_string_t* k
         {
             return entry;
         }
-
         index = (index + 1) % capacity;
     }
 }
@@ -453,13 +438,11 @@ obj_string_t* table_find_string(table_t* table, const char* chars, int length, u
 
         if (entry->key == NULL)
         {
-            // Stop if we find an empty non-tombstone entry.
-            if (IS_NIL(entry->value)) return NULL;
+            if (IS_NIL(entry->value)) return NULL; // Stop if we find an empty non-tombstone entry.
         }
         else if (entry->key->length == length && entry->key->hash == hash && memcmp(entry->key->chars, chars, length) == 0)
-        {              
-            // We found it.
-            return entry->key;
+        {
+            return entry->key; // We found it.
         }
 
         index = (index + 1) % table->capacity;
@@ -503,6 +486,8 @@ typedef enum
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+    OP_GET_LOCAL,
+    OP_SET_LOCAL,
     OP_GET_GLOBAL,
     OP_DEFINE_GLOBAL,
     OP_SET_GLOBAL,
@@ -519,7 +504,7 @@ typedef enum
     OP_RETURN,
 } op_code;
 
-struct _chunk
+struct _cw_struct_chunk
 {
     int count;
     int capacity;
@@ -584,17 +569,20 @@ int _constant_instruction(const char* name, chunk_t* chunk, int offset)
     return offset + 2;
 }
 
+int _byte_instruction(const char* name, chunk_t* chunk, int offset)
+{
+    uint8_t slot = chunk->code[offset + 1];
+    printf("%-16s %4d\n", name, slot);
+    return offset + 2;
+}
+
 int disassemble_instruction(chunk_t* chunk, int offset)
 {
     printf("%04d ", offset);
     if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
-    {
         printf("   | ");
-    }
     else
-    {
         printf("%4d ", chunk->lines[offset]);
-    } 
 
     uint8_t instruction = chunk->code[offset];
     switch (instruction)
@@ -604,6 +592,8 @@ int disassemble_instruction(chunk_t* chunk, int offset)
     case OP_TRUE:           return _simple_instruction("OP_TRUE", offset);
     case OP_FALSE:          return _simple_instruction("OP_FALSE", offset);
     case OP_POP:            return _simple_instruction("OP_POP", offset);
+    case OP_GET_LOCAL:      return _byte_instruction("OP_GET_LOCAL", chunk, offset);
+    case OP_SET_LOCAL:      return _byte_instruction("OP_SET_LOCAL", chunk, offset);
     case OP_GET_GLOBAL:     return _constant_instruction("OP_GET_GLOBAL", chunk, offset);
     case OP_DEFINE_GLOBAL:  return _constant_instruction("OP_DEFINE_GLOBAL", chunk, offset);
     case OP_SET_GLOBAL:     return _constant_instruction("OP_SET_GLOBAL", chunk, offset);
@@ -628,10 +618,8 @@ void disassemble_chunk(chunk_t* chunk, const char* name)
 {
     printf("== %s ==\n", name);
 
-    for (int offset = 0; offset < chunk->count;) 
-    {
+    for (int offset = 0; offset < chunk->count;)
         offset = disassemble_instruction(chunk, offset);
-    }
 }
 
 // -----------------------------------------------------------------------------
@@ -645,27 +633,24 @@ typedef enum
     TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
     TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
     TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
-
     // One or two character tokens.
     TOKEN_BANG, TOKEN_BANG_EQUAL,
     TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,
     TOKEN_GREATER, TOKEN_GREATER_EQUAL,
     TOKEN_LESS, TOKEN_LESS_EQUAL,
-
     // Literals.
     TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,
-
     // Keywords.
     TOKEN_AND, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE,
     TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
     TOKEN_PRINT, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
     TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE,
-
+    // Specials.
     TOKEN_ERROR,
     TOKEN_EOF
 } token_type;
 
-struct _token
+struct _cw_struct_token
 {
     token_type type;
     const char* start;
@@ -673,7 +658,7 @@ struct _token
     int line;
 };
 
-struct _scanner
+struct _cw_struct_scanner
 {
   const char* start;
   const char* current;
@@ -725,9 +710,7 @@ bool scanner_match(char expected)
 token_type scanner_check_keyword(int start, int length, const char* rest, token_type type)
 {
     if (scanner.current - scanner.start == start + length && memcmp(scanner.start + start, rest, length) == 0)
-    {
         return type;
-    }
 
     return TOKEN_IDENTIFIER;
 }
@@ -750,15 +733,10 @@ void scanner_skip_whitespace()
             break;
         case '/':
             if (scanner_peek_next() == '/')
-            {
                 while (scanner_peek() != '\n' && !scanner_end()) scanner_advance();
-            }
             else
-            {
                 return;
-            }
-        default:
-            return;
+        default: return;
         }
     }
 }
@@ -772,14 +750,12 @@ token_type scanner_identifier_type()
     case 'e': return scanner_check_keyword(1, 3, "lse", TOKEN_ELSE);
     case 'f':
         if (scanner.current - scanner.start > 1) 
-        {
             switch (scanner.start[1])
             {
             case 'a': return scanner_check_keyword(2, 3, "lse", TOKEN_FALSE);
             case 'o': return scanner_check_keyword(2, 1, "r", TOKEN_FOR);
             case 'u': return scanner_check_keyword(2, 1, "n", TOKEN_FUN);
             }
-        }
         break;
     case 'i': return scanner_check_keyword(1, 1, "f", TOKEN_IF);
     case 'n': return scanner_check_keyword(1, 2, "il", TOKEN_NIL);
@@ -789,13 +765,11 @@ token_type scanner_identifier_type()
     case 's': return scanner_check_keyword(1, 4, "uper", TOKEN_SUPER);
     case 't':
         if (scanner.current - scanner.start > 1)
-        {
             switch (scanner.start[1])
             {
             case 'h': return scanner_check_keyword(2, 2, "is", TOKEN_THIS);
             case 'r': return scanner_check_keyword(2, 2, "ue", TOKEN_TRUE);
             }
-        }
         break; 
     case 'v': return scanner_check_keyword(1, 2, "ar", TOKEN_VAR);
     case 'w': return scanner_check_keyword(1, 4, "hile", TOKEN_WHILE);
@@ -852,7 +826,6 @@ token_t token_make_number()
     {
         // Consume the ".".
         scanner_advance();
-
         while (is_digit(scanner_peek())) scanner_advance();
     }
 
@@ -862,23 +835,19 @@ token_t token_make_number()
 token_t token_make_identifier()
 {
     while (is_alpha(scanner_peek()) || is_digit(scanner_peek())) scanner_advance();
-
     return token_make(scanner_identifier_type());
 }
 
 token_t token_scan()
 {
     scanner_skip_whitespace();
-
     scanner.start = scanner.current;
-
     if (scanner_end()) return token_make(TOKEN_EOF);
 
     char c = scanner_advance();
 
     // identifiers and keywords
     if (is_alpha(c)) return token_make_identifier();
-
     if (is_digit(c)) return token_make_number();
 
     switch (c)
@@ -911,7 +880,7 @@ token_t token_scan()
 // ----| compiler |-------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-struct _parser
+struct _cw_struct_parser
 {
     token_t current;
     token_t previous;
@@ -934,17 +903,29 @@ typedef enum
     PREC_PRIMARY
 } precedence;
 
-typedef void (*parse_fn)(VM* vm, parser_t* parser, bool can_assign);
-
-struct _parse_rule
+struct _cw_struct_parse_rule
 {
     parse_fn prefix;
     parse_fn infix;
     precedence precedence;
 };
 
+struct _cw_struct_local
+{
+    token_t name;
+    int depth;
+};
+
+struct _cw_struct_compiler
+{
+    local_t locals[UINT8_COUNT];
+    int local_count;
+    int scope_depth;
+};
+
 parse_rule_t* parser_get_rule(token_type type);
 
+compiler_t* current_compiler = NULL;
 chunk_t* compiling_chunk;
 
 chunk_t* current_chunk()
@@ -952,10 +933,16 @@ chunk_t* current_chunk()
     return compiling_chunk;
 }
 
-static void parser_error_at(parser_t* parser, token_t* token, const char* message)
+void compiler_init(compiler_t* compiler)
+{
+    compiler->local_count = 0;
+    compiler->scope_depth = 0;
+    current_compiler = compiler;
+}
+
+void parser_error_at(parser_t* parser, token_t* token, const char* message)
 {
     if (parser->panic_mode) return;
-
     parser->panic_mode = true;
 
     fprintf(stderr, "[line %d] Error", token->line);
@@ -977,14 +964,50 @@ static void parser_error_at(parser_t* parser, token_t* token, const char* messag
     parser->had_error = true;
 }
 
-static void parser_error_at_current(parser_t* parser, const char* message)
+void parser_error_at_current(parser_t* parser, const char* message)
 {
     parser_error_at(parser, &parser->current, message);
 }
 
-static void parser_error(parser_t* parser, const char* message)
+void parser_error(parser_t* parser, const char* message)
 {
     parser_error_at(parser, &parser->previous, message);
+}
+
+void local_add(parser_t* parser, token_t name)
+{
+    if (current_compiler->local_count == UINT8_COUNT)
+    {
+        parser_error(parser, "Too many local variables in function.");
+        return;
+    }
+
+    local_t* local = &current_compiler->locals[current_compiler->local_count++];
+    local->name = name;
+    local->depth = -1; 
+}
+
+bool _parser_identifiers_equal(token_t* a, token_t* b)
+{
+    if (a->length != b->length) return false;
+    return memcmp(a->start, b->start, a->length) == 0;
+}
+
+int _parser_resolve_local(parser_t* parser, compiler_t* compiler, token_t* name)
+{
+    for (int i = compiler->local_count - 1; i >= 0; i--)
+    {
+        local_t* local = &compiler->locals[i];
+        if (_parser_identifiers_equal(name, &local->name))
+        {
+            if (local->depth == -1)
+                parser_error(parser, "Cannot read local variable in its own initializer.");
+
+            return i;
+        }
+    }
+
+    return -1;
 }
 
 void parser_advance(parser_t* parser)
@@ -1007,7 +1030,6 @@ void parser_consume(parser_t* parser, token_type type, const char* message)
         parser_advance(parser);
         return;
     }
-
     parser_error_at_current(parser, message); 
 }
 
@@ -1042,6 +1064,41 @@ void parser_emit_bytes(parser_t* parser, uint8_t byte1, uint8_t byte2)
     parser_emit_byte(parser, byte2);
 }
 
+void _parser_mark_initialized()
+{
+    current_compiler->locals[current_compiler->local_count - 1].depth = current_compiler->scope_depth;
+}
+
+void parser_define_variable(parser_t* parser, uint8_t global)
+{
+    if (current_compiler->scope_depth > 0)
+    {
+        _parser_mark_initialized();
+        return;
+    }
+
+    parser_emit_bytes(parser, OP_DEFINE_GLOBAL, global);
+}
+
+void parser_declare_variable(parser_t* parser)
+{
+    // Global variables are implicitly declared.
+    if (current_compiler->scope_depth == 0) return;
+
+    token_t* name = &parser->previous;
+    for (int i = current_compiler->local_count - 1; i >= 0; i--)
+    {
+        local_t* local = &current_compiler->locals[i];
+        if (local->depth != -1 && local->depth < current_compiler->scope_depth)
+            break;
+
+        if (_parser_identifiers_equal(name, &local->name))
+            parser_error(parser, "Variable with this name already declared in this scope.");
+    }
+
+    local_add(parser, *name);
+}
+
 uint8_t parser_make_constant(parser_t* parser, value_t value)
 {
     int constant = chunk_add_constant(current_chunk(), value);
@@ -1050,7 +1107,6 @@ uint8_t parser_make_constant(parser_t* parser, value_t value)
         parser_error(parser, "Too many constants in one chunk.");
         return 0;
     }
-
     return (uint8_t)constant;
 }
 
@@ -1062,6 +1118,10 @@ uint8_t _parser_make_constant_indentifier(VM* vm, parser_t* parser, token_t* nam
 uint8_t parser_make_variable(VM* vm, parser_t* parser, const char* error_message)
 {
     parser_consume(parser, TOKEN_IDENTIFIER, error_message);
+
+    parser_declare_variable(parser);
+    if (current_compiler->scope_depth > 0) return 0;
+
     return _parser_make_constant_indentifier(vm, parser, &parser->previous);
 }
 
@@ -1070,26 +1130,18 @@ void parser_emit_constant(parser_t* parser, value_t value)
     parser_emit_bytes(parser, OP_CONSTANT, parser_make_constant(parser, value));
 }
 
-void parser_define_variable(parser_t* parser, uint8_t global)
-{
-    parser_emit_bytes(parser, OP_DEFINE_GLOBAL, global);
-}
-
 static void end_compiler(parser_t* parser)
 {
     parser_emit_return(parser);
 #ifdef DEBUG_PRINT_CODE
     if (!parser->had_error)
-    {
         disassemble_chunk(current_chunk(), "code");
-    }
 #endif
 }
 
 void parser_synchronize(parser_t* parser)
 {
     parser->panic_mode = false;
-
     while (parser->current.type != TOKEN_EOF)
     {
         if (parser->previous.type == TOKEN_SEMICOLON) return;
@@ -1157,16 +1209,28 @@ void parse_string(VM* vm, parser_t* parser, bool can_assign)
 
 void parse_variable_named(VM* vm, parser_t* parser, token_t name, bool can_assign)
 {
-    uint8_t arg = _parser_make_constant_indentifier(vm, parser, &name);
+    uint8_t get_op, set_op;
+    int arg = _parser_resolve_local(parser, current_compiler, &name);
+    if (arg != -1)
+    {
+        get_op = OP_GET_LOCAL;
+        set_op = OP_SET_LOCAL;
+    }
+    else
+    {
+        arg = _parser_make_constant_indentifier(vm, parser, &name);
+        get_op = OP_GET_GLOBAL;
+        set_op = OP_SET_GLOBAL;
+    }
 
     if (can_assign && parser_match(parser, TOKEN_EQUAL))
     {
         parse_expression(vm, parser);
-        parser_emit_bytes(parser, OP_SET_GLOBAL, arg);
+        parser_emit_bytes(parser, set_op, (uint8_t)arg);
     }
     else
     {
-        parser_emit_bytes(parser, OP_GET_GLOBAL, arg);
+        parser_emit_bytes(parser, get_op, (uint8_t)arg);
     }
 }
 
@@ -1176,6 +1240,8 @@ void parse_variable(VM* vm, parser_t* parser, bool can_assign)
 }
 
 // statements
+void parse_statement(VM* vm, parser_t* parser);
+
 void parse_statement_print(VM* vm, parser_t* parser)
 {
     parse_expression(vm, parser);
@@ -1188,14 +1254,6 @@ void parse_statement_expression(VM* vm, parser_t* parser)
     parse_expression(vm, parser);
     parser_consume(parser, TOKEN_SEMICOLON, "Expect ';' after expression.");
     parser_emit_byte(parser, OP_POP);
-}
-
-void parse_statement(VM* vm, parser_t* parser)
-{
-    if (parser_match(parser, TOKEN_PRINT))
-        parse_statement_print(vm, parser);
-    else
-        parse_statement_expression(vm, parser);
 }
 
 void parse_declaration_var(VM* vm, parser_t* parser)
@@ -1220,6 +1278,47 @@ void parse_declaration(VM* vm, parser_t* parser)
         parse_statement(vm, parser);
 
     if (parser->panic_mode) parser_synchronize(parser);
+}
+
+void block(VM* vm, parser_t* parser)
+{
+    while (!parser_check(parser, TOKEN_RIGHT_BRACE) && !parser_check(parser, TOKEN_EOF))
+    {
+        parse_declaration(vm, parser);
+    }
+
+    parser_consume(parser, TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
+static void begin_scope(parser_t* parser) { current_compiler->scope_depth++; }
+
+static void end_scope(parser_t* parser)
+{
+    current_compiler->scope_depth--;
+
+    while (current_compiler->local_count > 0 && current_compiler->locals[current_compiler->local_count - 1].depth > current_compiler->scope_depth)
+    {
+        parser_emit_byte(parser, OP_POP);
+        current_compiler->local_count--;
+    }
+}
+
+void parse_statement(VM* vm, parser_t* parser)
+{
+    if (parser_match(parser, TOKEN_PRINT))
+    {
+        parse_statement_print(vm, parser);
+    } 
+    else if (parser_match(parser, TOKEN_LEFT_BRACE))
+    {
+        begin_scope(parser);
+        block(vm, parser);
+        end_scope(parser);
+    }
+    else
+    {
+        parse_statement_expression(vm, parser);
+    }
 }
 
 void parse_grouping(VM* vm, parser_t* parser, bool can_assign)
@@ -1355,9 +1454,7 @@ bool compile(VM* vm, const char* src, chunk_t* chunk)
 // ----| vm |-------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-#include <stdarg.h>
-
-struct _virtual_machine
+struct _cw_struct_vm
 {
     chunk_t* chunk;
     uint8_t* ip;
@@ -1373,7 +1470,7 @@ void vm_objects_free(VM* vm)
 {
     obj_t* object = vm->objects;
     while (object != NULL)
-    { 
+    {
         obj_t* next = object->next;
         _obj_free(object);
         object = next;
@@ -1475,7 +1572,6 @@ static interpret_result vm_run(VM* vm)
 #define READ_BYTE() (*vm->ip++)
 #define READ_CONSTANT() (vm->chunk->constants.values[READ_BYTE()])
 #define READ_STRING() AS_STRING(READ_CONSTANT())
-
 #define BINARY_OP(vm, type, op)                                     \
     do                                                              \
     {                                                               \
@@ -1516,6 +1612,18 @@ static interpret_result vm_run(VM* vm)
         case OP_TRUE:       vm_push(vm, BOOL_VAL(true)); break;
         case OP_FALSE:      vm_push(vm, BOOL_VAL(false)); break;
         case OP_POP:        vm_pop(vm); break;
+        case OP_GET_LOCAL:
+        {
+            uint8_t slot = READ_BYTE();
+            vm_push(vm, vm->stack[slot]);
+            break;
+        }
+        case OP_SET_LOCAL:
+        {
+            uint8_t slot = READ_BYTE();
+            vm->stack[slot] = vm_peek(vm, 0);
+            break;
+        }
         case OP_GET_GLOBAL:
         {
             obj_string_t* name = READ_STRING();
@@ -1600,7 +1708,6 @@ static interpret_result vm_run(VM* vm)
 #undef READ_BYTE
 #undef READ_CONSTANT
 #undef READ_STRING
-
 #undef BINARY_OP
 }
 
@@ -1623,7 +1730,6 @@ interpret_result vm_interpret(VM* vm, const char* src)
     chunk_free(&chunk);
     return result;
 }
-
 
 // -----------------------------------------------------------------------------
 // ----| main |-----------------------------------------------------------------
