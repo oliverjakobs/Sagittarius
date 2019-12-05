@@ -1,2 +1,2 @@
-clockwork: clockwork.c
-	gcc clockwork.c -o cw -Wall -std=c99
+clockwork: main.c
+	gcc main.c -o cw -Wall -std=c99
