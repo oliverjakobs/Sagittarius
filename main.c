@@ -76,6 +76,9 @@ int main(int argc, const char* argv[])
     cw_virtual_machine_t vm;
     cw_init(&vm);
 
+    // todo: add functions
+    // _cw_define_native(&vm, "name", function);
+
     if (argc == 1)
     {
         repl(&vm);

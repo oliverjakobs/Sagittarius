@@ -149,6 +149,7 @@ typedef enum
     CW_OP_JUMP_IF_FALSE,
     CW_OP_LOOP,
     CW_OP_CALL,
+    CW_OP_CLOSURE,
     CW_OP_RETURN,
 } cw_op_code;
 
@@ -173,6 +174,7 @@ int cw_chunk_add_constant(cw_chunk_t* chunk, cw_value_t value);
 
 typedef enum
 {
+    CW_OBJ_CLOSURE,
     CW_OBJ_FUNCTION,
     CW_OBJ_NATIVE,
     CW_OBJ_STRING,
@@ -200,6 +202,13 @@ typedef struct
     cw_obj_string_t* name;
 } cw_obj_function_t;
 
+typedef struct
+{
+    cw_obj_t obj;
+    cw_obj_function_t* function;
+} cw_obj_closure_t;
+
+
 typedef cw_value_t (*cw_native_fn)(int arg_count, cw_value_t* args);
 
 typedef struct
@@ -211,15 +220,17 @@ typedef struct
 
 bool cw_obj_is_type(cw_value_t value, cw_obj_type type);
 
-#define CW_OBJ_TYPE(value)     (CW_AS_OBJ(value)->type)
-#define CW_IS_FUNCTION(value)  cw_obj_is_type(value, CW_OBJ_FUNCTION)
-#define CW_IS_NATIVE(value)    cw_obj_is_type(value, CW_OBJ_NATIVE)
-#define CW_IS_STRING(value)    cw_obj_is_type(value, CW_OBJ_STRING)
+#define CW_OBJ_TYPE(value)      (CW_AS_OBJ(value)->type)
+#define CW_IS_CLOSURE(value)    cw_obj_is_type(value, CW_OBJ_CLOSURE)
+#define CW_IS_FUNCTION(value)   cw_obj_is_type(value, CW_OBJ_FUNCTION)
+#define CW_IS_NATIVE(value)     cw_obj_is_type(value, CW_OBJ_NATIVE)
+#define CW_IS_STRING(value)     cw_obj_is_type(value, CW_OBJ_STRING)
 
-#define CW_AS_FUNCTION(value)  ((cw_obj_function_t*)CW_AS_OBJ(value))
-#define CW_AS_NATIVE(value)    (((cw_obj_native_t*)CW_AS_OBJ(value))->function)
-#define CW_AS_STRING(value)    ((cw_obj_string_t*)CW_AS_OBJ(value))
-#define CW_AS_CSTRING(value)   (((cw_obj_string_t*)CW_AS_OBJ(value))->chars)
+#define CW_AS_CLOSURE(value)    ((cw_obj_closure_t*)CW_AS_OBJ(value))
+#define CW_AS_FUNCTION(value)   ((cw_obj_function_t*)CW_AS_OBJ(value))
+#define CW_AS_NATIVE(value)     (((cw_obj_native_t*)CW_AS_OBJ(value))->function)
+#define CW_AS_STRING(value)     ((cw_obj_string_t*)CW_AS_OBJ(value))
+#define CW_AS_CSTRING(value)    (((cw_obj_string_t*)CW_AS_OBJ(value))->chars)
 
 void cw_print_obj(cw_value_t value);
 
@@ -228,6 +239,7 @@ cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars,
 
 cw_obj_function_t* cw_function_new(cw_virtual_machine_t* vm);
 cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function);
+cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function);
 
 void cw_objects_free(cw_virtual_machine_t* vm);
 
@@ -336,7 +348,7 @@ cw_obj_function_t* cw_compile(cw_virtual_machine_t* vm, const char* src);
 
 typedef struct
 {
-    cw_obj_function_t* function;
+    cw_obj_closure_t* closure;
     uint8_t* ip;
     cw_value_t* slots;
 } cw_call_frame_t;
@@ -536,10 +548,22 @@ cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function)
     return native;
 }
 
+cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function)
+{
+    cw_obj_closure_t* closure = CW_ALLOCATE_OBJ(vm, cw_obj_closure_t, CW_OBJ_CLOSURE);
+    closure->function = function;
+    return closure; 
+}
+
 static void _cw_object_free(cw_obj_t* object)
 {
     switch (object->type)
     {
+    case CW_OBJ_CLOSURE:
+    {
+        CW_FREE(cw_obj_closure_t, object);
+        break;
+    } 
     case CW_OBJ_FUNCTION:
     {
         cw_obj_function_t* function = (cw_obj_function_t*)object;
@@ -585,6 +609,9 @@ void cw_print_obj(cw_value_t value)
 {
     switch (CW_OBJ_TYPE(value))
     {
+    case CW_OBJ_CLOSURE:
+        _cw_print_function(CW_AS_CLOSURE(value)->function);
+        break;
     case CW_OBJ_FUNCTION:
         _cw_print_function(CW_AS_FUNCTION(value));
         break;
@@ -853,6 +880,16 @@ int cw_disassemble_instruction(cw_chunk_t* chunk, int offset)
     case CW_OP_JUMP_IF_FALSE:   return _cw_jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
     case CW_OP_LOOP:            return _cw_jump_instruction("OP_LOOP", -1, chunk, offset);
     case CW_OP_CALL:            return _cw_byte_instruction("OP_CALL", chunk, offset);
+    case CW_OP_CLOSURE:
+    {
+        offset++;
+        uint8_t constant = chunk->code[offset++];
+        printf("%-16s %4d ", "OP_CLOSURE", constant);
+        cw_print_value(chunk->constants.values[constant]);
+        printf("\n");
+
+        return offset;
+    }
     case CW_OP_RETURN:          return _cw_simple_instruction("OP_RETURN", offset);
     default:
         printf("Unknown opcode %d\n", instruction);
@@ -1965,7 +2002,7 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
 
     // Create the function object.
     cw_obj_function_t* function = _cw_compiler_end(parser);
-    _cw_parser_emit_bytes(parser, CW_OP_CONSTANT, _cw_parser_make_constant(parser, CW_OBJ_VAL(function)));
+    _cw_parser_emit_bytes(parser, CW_OP_CLOSURE, _cw_parser_make_constant(parser, CW_OBJ_VAL(function)));
 }
 
 // -----------------------------------------------------------------------------
@@ -1989,7 +2026,7 @@ static void _cw_runtime_error(cw_virtual_machine_t* vm, const char* format, ...)
     for (int i = vm->frame_count - 1; i >= 0; i--)
     {
         cw_call_frame_t* frame = &vm->frames[i];
-        cw_obj_function_t* function = frame->function;
+        cw_obj_function_t* function = frame->closure->function;
     
         // -1 because the IP is sitting on the next instruction to be // executed.
         size_t instruction = frame->ip - function->chunk.code - 1;
@@ -2058,11 +2095,11 @@ static cw_value_t _cw_peek(cw_virtual_machine_t* vm, int distance)
     return vm->stack_top[-1 - distance];
 }
 
-static bool _cw_call_function(cw_virtual_machine_t* vm, cw_obj_function_t* function, int arg_count)
+static bool _cw_call_closure(cw_virtual_machine_t* vm, cw_obj_closure_t* closure, int arg_count)
 {
-    if (arg_count != function->arity)
+    if (arg_count != closure->function->arity)
     {
-        _cw_runtime_error(vm, "Expected %d arguments but got %d.", function->arity, arg_count);
+        _cw_runtime_error(vm, "Expected %d arguments but got %d.", closure->function->arity, arg_count);
         return false;
     }
 
@@ -2073,8 +2110,8 @@ static bool _cw_call_function(cw_virtual_machine_t* vm, cw_obj_function_t* funct
     }
 
     cw_call_frame_t* frame = &vm->frames[vm->frame_count++];
-    frame->function = function;
-    frame->ip = function->chunk.code;
+    frame->closure = closure;
+    frame->ip = closure->function->chunk.code;
 
     frame->slots = vm->stack_top - arg_count - 1;
     return true;
@@ -2086,7 +2123,7 @@ static bool _cw_call_value(cw_virtual_machine_t* vm, cw_value_t callee, int arg_
     {
         switch (CW_OBJ_TYPE(callee))
         {
-        case CW_OBJ_FUNCTION: return _cw_call_function(vm, CW_AS_FUNCTION(callee), arg_count);
+        case CW_OBJ_CLOSURE: return _cw_call_closure(vm, CW_AS_CLOSURE(callee), arg_count);
         case CW_OBJ_NATIVE:
         {
             cw_native_fn native = CW_AS_NATIVE(callee);
@@ -2129,7 +2166,7 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
 
 #define _CW_READ_BYTE()         (*frame->ip++)
 #define _CW_READ_SHORT()        (frame->ip += 2, (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
-#define _CW_READ_CONSTANT()     (frame->function->chunk.constants.values[_CW_READ_BYTE()])
+#define _CW_READ_CONSTANT()     (frame->closure->function->chunk.constants.values[_CW_READ_BYTE()])
 #define _CW_READ_STRING()       CW_AS_STRING(_CW_READ_CONSTANT())
 #define _CW_BINARY_OP(type, op)                                                 \
     do                                                                          \
@@ -2155,7 +2192,7 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
             printf(" ]");
         }
         printf("\n");
-        cw_disassemble_instruction(&frame->function->chunk, (int)(frame->ip - frame->function->chunk.code));
+        cw_disassemble_instruction(&frame->closure->function->chunk, (int)(frame->ip - frame->closure->function->chunk.code));
 #endif
 
         uint8_t instruction;
@@ -2284,7 +2321,14 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
                 return CW_INTERPRET_RUNTIME_ERROR;
             frame = &vm->frames[vm->frame_count - 1];
             break;
-        } 
+        }
+        case CW_OP_CLOSURE:
+        {
+            cw_obj_function_t* function = CW_AS_FUNCTION(_CW_READ_CONSTANT());
+            cw_obj_closure_t* closure = cw_closure_new(vm, function);
+            cw_push(vm, CW_OBJ_VAL(closure));
+            break;
+        }
         case CW_OP_RETURN:
         {
             cw_value_t result = cw_pop(vm);
@@ -2323,10 +2367,10 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src)
 
     _cw_call_value(vm, CW_OBJ_VAL(function), 0);
 
-    cw_call_frame_t* frame = &vm->frames[vm->frame_count++];
-    frame->function = function;
-    frame->ip = function->chunk.code;
-    frame->slots = vm->stack;
+    cw_obj_closure_t* closure = cw_closure_new(vm, function);
+    cw_pop(vm);
+    cw_push(vm, CW_OBJ_VAL(closure));
+    _cw_call_value(vm, CW_OBJ_VAL(closure), 0);
 
     return _cw_run(vm);
 }
