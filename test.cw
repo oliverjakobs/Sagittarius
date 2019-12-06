@@ -1,3 +1,7 @@
-var a = "hello";
 
-print a + " world";
+fun greetings(name)
+{
+    print "Hello, " + "World";
+}
+
+greetings("World");

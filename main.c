@@ -1,4 +1,7 @@
 
+#define CW_DEBUG_PRINT_CODE
+#define CW_DEBUG_TRACE_EXECUTION
+
 #define CLOCKWORK_IMPLEMENTATION
 #include "clockwork.h"
 
