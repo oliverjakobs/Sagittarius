@@ -1,6 +1,8 @@
 
 #define CW_DEBUG_PRINT_CODE
 //#define CW_DEBUG_TRACE_EXECUTION
+//#define CW_DEBUG_STRESS_GC
+#define CW_DEBUG_LOG_GC
 
 #define CLOCKWORK_IMPLEMENTATION
 #include "clockwork.h"
@@ -71,10 +73,17 @@ static void run_file(cw_virtual_machine_t* vm, const char* path)
     if (result == CW_INTERPRET_RUNTIME_ERROR) exit(70);
 }
 
+static cw_value_t test_fun(int argCount, cw_value_t* args)
+{
+    printf("Hello from C\n");
+    return CW_NIL_VAL;
+}
+
 int main(int argc, const char* argv[]) 
 {
     cw_virtual_machine_t vm;
     cw_init(&vm);
+    _cw_define_native(&vm, "c_fun", test_fun);
 
     // todo: add functions
     // _cw_define_native(&vm, "name", function);

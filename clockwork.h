@@ -119,9 +119,6 @@ extern "C"
 
 #include <stdarg.h>
 
-// #define CW_DEBUG_PRINT_CODE
-// #define CW_DEBUG_TRACE_EXECUTION
-
 #define CW_UINT8_COUNT      (UINT8_MAX + 1)
 
 // -----------------------------------------------------------------------------
@@ -129,33 +126,8 @@ extern "C"
 // -----------------------------------------------------------------------------
 
 typedef struct _cw_struct_vm        cw_virtual_machine_t;
+typedef struct _cw_struct_compiler  cw_compiler_t;
 typedef struct _cw_struct_obj       cw_obj_t;
-
-// -----------------------------------------------------------------------------
-// ----| Memory |---------------------------------------------------------------
-// -----------------------------------------------------------------------------
-
-// calculates a new capacity based on a given current capacity. It scales based 
-// on the old size and grows by a factor of two. If the current capacity is zero
-// we jump straight to eight elements instead of starting at one.
-#define CW_GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity) * 2)
-
-// wrapper for cw_memory_reallocate
-#define CW_ALLOCATE(type, count)    (type*)cw_memory_reallocate(NULL, 0, sizeof(type) * (count))
-#define CW_FREE(type, pointer)      cw_memory_reallocate(pointer, sizeof(type), 0)
-
-#define CW_GROW_ARRAY(previous, type, oldCount, count)  (type*)cw_memory_reallocate(previous, sizeof(type) * (oldCount), sizeof(type) * (count))
-#define CW_FREE_ARRAY(type, pointer, oldCount)          cw_memory_reallocate(pointer, sizeof(type) * (oldCount), 0)
-
-// The single function for all dynamic memory management
-// The two size arguments passed to cw_memory_reallocate() control which 
-// operation to perform:
-// oldSize      newSize                 Operation
-// 0            Non‑zero                Allocate new block.
-// Non‑zero     0                       Free allocation.
-// Non‑zero     Smaller than oldSize    Shrink existing allocation.
-// Non‑zero 	Larger than oldSize     Grow existing allocation.
-void* cw_memory_reallocate(void* previous, size_t old_size, size_t new_size);
 
 // -----------------------------------------------------------------------------
 // ----| Value |----------------------------------------------------------------
@@ -202,8 +174,8 @@ typedef struct
 } cw_value_array_t;
 
 void cw_value_array_init(cw_value_array_t* array);
-void cw_value_array_free(cw_value_array_t* array);
-void cw_value_array_write(cw_value_array_t* array, cw_value_t value);
+void cw_value_array_free(cw_virtual_machine_t* vm,cw_value_array_t* array);
+void cw_value_array_write(cw_virtual_machine_t* vm,cw_value_array_t* array, cw_value_t value);
 
 bool cw_values_equal(cw_value_t a, cw_value_t b);
 
@@ -256,10 +228,10 @@ typedef struct
 } cw_chunk_t;
 
 void cw_chunk_init(cw_chunk_t* chunk);
-void cw_chunk_free(cw_chunk_t* chunk);
-void cw_chunk_write(cw_chunk_t* chunk, uint8_t byte, int line);
+void cw_chunk_free(cw_virtual_machine_t* vm,cw_chunk_t* chunk);
+void cw_chunk_write(cw_virtual_machine_t* vm,cw_chunk_t* chunk, uint8_t byte, int line);
 
-int cw_chunk_add_constant(cw_chunk_t* chunk, cw_value_t value);
+int cw_chunk_add_constant(cw_virtual_machine_t* vm,cw_chunk_t* chunk, cw_value_t value);
 
 // -----------------------------------------------------------------------------
 // ----| Object |---------------------------------------------------------------
@@ -277,6 +249,7 @@ typedef enum
 struct _cw_struct_obj
 {
     cw_obj_type type;
+    bool marked;
     cw_obj_t* next;
 };
 
@@ -366,15 +339,16 @@ typedef struct
 } cw_table_t;
 
 void cw_table_init(cw_table_t* table);
-void cw_table_free(cw_table_t* table);
+void cw_table_free(cw_virtual_machine_t* vm,cw_table_t* table);
 
-void cw_table_copy(cw_table_t* from, cw_table_t* to);
+void cw_table_copy(cw_virtual_machine_t* vm,cw_table_t* from, cw_table_t* to);
 
-bool cw_table_set(cw_table_t* table, cw_obj_string_t* key, cw_value_t value);
+bool cw_table_set(cw_virtual_machine_t* vm,cw_table_t* table, cw_obj_string_t* key, cw_value_t value);
 bool cw_table_get(cw_table_t* table, cw_obj_string_t* key, cw_value_t* value);
 bool cw_table_delete(cw_table_t* table, cw_obj_string_t* key);
 
 cw_obj_string_t* cw_table_find_string(cw_table_t* table, const char* chars, int length, uint32_t hash);
+void cw_table_remove_white(cw_table_t* table);
 
 // -----------------------------------------------------------------------------
 // ----| Debug |----------------------------------------------------------------
@@ -470,6 +444,14 @@ struct _cw_struct_vm
     cw_table_t strings;
     cw_obj_upvalue_t* open_upvalues;
     cw_obj_t* objects;
+
+    // GC
+    size_t bytes_allocated;
+    size_t next_gc;
+
+    int gray_count;
+    int gray_capacity;
+    cw_obj_t** gray_stack;
 };
 
 
@@ -489,6 +471,35 @@ cw_value_t cw_pop(cw_virtual_machine_t* vm);
 cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src);
 
 // -----------------------------------------------------------------------------
+// ----| Memory |---------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+// calculates a new capacity based on a given current capacity. It scales based 
+// on the old size and grows by a factor of two. If the current capacity is zero
+// we jump straight to eight elements instead of starting at one.
+#define CW_GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity) * 2)
+
+// wrapper for cw_memory_reallocate
+#define CW_ALLOCATE(vm, type, count)    (type*)cw_memory_reallocate(vm, NULL, 0, sizeof(type) * (count))
+#define CW_FREE(vm, type, pointer)      cw_memory_reallocate(vm, pointer, sizeof(type), 0)
+
+#define CW_GROW_ARRAY(vm, previous, type, oldCount, count)  (type*)cw_memory_reallocate(vm, previous, sizeof(type) * (oldCount), sizeof(type) * (count))
+#define CW_FREE_ARRAY(vm, type, pointer, oldCount)          cw_memory_reallocate(vm, pointer, sizeof(type) * (oldCount), 0)
+
+// The single function for all dynamic memory management
+// The two size arguments passed to cw_memory_reallocate() control which 
+// operation to perform:
+// oldSize      newSize                 Operation
+// 0            Non‑zero                Allocate new block.
+// Non‑zero     0                       Free allocation.
+// Non‑zero     Smaller than oldSize    Shrink existing allocation.
+// Non‑zero 	Larger than oldSize     Grow existing allocation.
+void* cw_memory_reallocate(cw_virtual_machine_t* vm, void* previous, size_t old_size, size_t new_size);
+
+void cw_memory_collect_garbage(cw_virtual_machine_t* vm);
+
+
+// -----------------------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 #ifdef __cplusplus
@@ -502,19 +513,6 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src);
 
 #ifdef CLOCKWORK_IMPLEMENTATION
 
-// -----------------------------------------------------------------------------
-// ----| Memory |---------------------------------------------------------------
-// -----------------------------------------------------------------------------
-
-void* cw_memory_reallocate(void* previous, size_t old_size, size_t new_size)
-{
-    if (new_size == 0) 
-    {
-        free(previous);
-        return NULL;
-    }
-    return realloc(previous, new_size);
-}
 
 // -----------------------------------------------------------------------------
 // ----| Value |----------------------------------------------------------------
@@ -527,19 +525,19 @@ void cw_value_array_init(cw_value_array_t* array)
     array->count = 0;
 }
 
-void cw_value_array_free(cw_value_array_t* array)
+void cw_value_array_free(cw_virtual_machine_t* vm, cw_value_array_t* array)
 {
-    CW_FREE_ARRAY(cw_value_t, array->values, array->capacity);
+    CW_FREE_ARRAY(vm, cw_value_t, array->values, array->capacity);
     cw_value_array_init(array);
 }
 
-void cw_value_array_write(cw_value_array_t* array, cw_value_t value)
+void cw_value_array_write(cw_virtual_machine_t* vm, cw_value_array_t* array, cw_value_t value)
 {
     if (array->capacity < array->count + 1)
     {
         int old_capacity = array->capacity;
         array->capacity = CW_GROW_CAPACITY(old_capacity);
-        array->values = CW_GROW_ARRAY(array->values, cw_value_t, old_capacity, array->capacity);
+        array->values = CW_GROW_ARRAY(vm, array->values, cw_value_t, old_capacity, array->capacity);
     }
     array->values[array->count] = value;
     array->count++;
@@ -592,10 +590,15 @@ uint32_t _cw_obj_string_hash(const char* key, int length)
 
 static cw_obj_t* _cw__obj_allocate(cw_virtual_machine_t* vm, size_t size, cw_obj_type type)
 {
-    cw_obj_t* object = (cw_obj_t*)cw_memory_reallocate(NULL, 0, size);
+    cw_obj_t* object = (cw_obj_t*)cw_memory_reallocate(vm, NULL, 0, size);
     object->type = type;
+    object->marked = false;
     object->next = vm->objects;
     vm->objects = object;
+
+#ifdef CW_DEBUG_LOG_GC
+    printf("%p allocate %ld for %d\n", (void*)object, size, type);
+#endif
 
     return object;
 }
@@ -607,7 +610,9 @@ static cw_obj_string_t* _cw_obj_allocate_string(cw_virtual_machine_t* vm, char* 
     string->chars = chars;
     string->hash = hash;
 
-    cw_table_set(&vm->strings, string, CW_NIL_VAL);
+    cw_push(vm, CW_OBJ_VAL(string));
+    cw_table_set(vm, &vm->strings, string, CW_NIL_VAL);
+    cw_pop(vm);
     return string;
 }
 
@@ -617,7 +622,7 @@ cw_obj_string_t* cw_obj_string_move(cw_virtual_machine_t* vm, char* chars, int l
     cw_obj_string_t* interned = cw_table_find_string(&vm->strings, chars, length, hash);
     if (interned != NULL)
     {
-        CW_FREE_ARRAY(char, chars, length + 1);
+        CW_FREE_ARRAY(vm, char, chars, length + 1);
         return interned;
     }
     return _cw_obj_allocate_string(vm, chars, length, hash);
@@ -630,7 +635,7 @@ cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars,
 
     if (interned != NULL) return interned;
 
-    char* heap_chars = CW_ALLOCATE(char, length + 1);
+    char* heap_chars = CW_ALLOCATE(vm, char, length + 1);
     memcpy(heap_chars, chars, length);
     heap_chars[length] = '\0';
 
@@ -666,7 +671,7 @@ cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function)
 
 cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function)
 {
-    cw_obj_upvalue_t** upvalues = CW_ALLOCATE(cw_obj_upvalue_t*, function->upvalue_count);
+    cw_obj_upvalue_t** upvalues = CW_ALLOCATE(vm, cw_obj_upvalue_t*, function->upvalue_count);
     for (int i = 0; i < function->upvalue_count; i++)
     {
         upvalues[i] = NULL;
@@ -679,36 +684,40 @@ cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* fu
     return closure; 
 }
 
-static void _cw_object_free(cw_obj_t* object)
+static void _cw_object_free(cw_virtual_machine_t* vm, cw_obj_t* object)
 {
+#ifdef CW_DEBUG_LOG_GC
+    printf("%p free type %d\n", (void*)object, object->type);
+#endif
+
     switch (object->type)
     {
     case CW_OBJ_CLOSURE:
     {
         cw_obj_closure_t* closure = (cw_obj_closure_t*)object;
-        CW_FREE_ARRAY(cw_obj_upvalue_t*, closure->upvalues, closure->upvalue_count);
-        CW_FREE(cw_obj_closure_t, object);
+        CW_FREE_ARRAY(vm, cw_obj_upvalue_t*, closure->upvalues, closure->upvalue_count);
+        CW_FREE(vm, cw_obj_closure_t, object);
         break;
     } 
     case CW_OBJ_FUNCTION:
     {
         cw_obj_function_t* function = (cw_obj_function_t*)object;
-        cw_chunk_free(&function->chunk);
-        CW_FREE(cw_obj_function_t, object);
+        cw_chunk_free(vm, &function->chunk);
+        CW_FREE(vm, cw_obj_function_t, object);
         break;
     }
     case CW_OBJ_NATIVE:
-        CW_FREE(cw_obj_native_t, object);
+        CW_FREE(vm, cw_obj_native_t, object);
         break;
     case CW_OBJ_STRING: 
     {
         cw_obj_string_t* string = (cw_obj_string_t*)object;
-        CW_FREE_ARRAY(char, string->chars, string->length + 1);
-        CW_FREE(cw_obj_string_t, object);
+        CW_FREE_ARRAY(vm, char, string->chars, string->length + 1);
+        CW_FREE(vm, cw_obj_string_t, object);
         break;
     }
     case CW_OBJ_UPVALUE:
-        CW_FREE(cw_obj_upvalue_t, object);
+        CW_FREE(vm, cw_obj_upvalue_t, object);
         break;
     }
 }
@@ -719,7 +728,7 @@ void cw_objects_free(cw_virtual_machine_t* vm)
     while (object != NULL)
     {
         cw_obj_t* next = object->next;
-        _cw_object_free(object);
+        _cw_object_free(vm, object);
         object = next;
     }
 }
@@ -769,19 +778,19 @@ void cw_table_init(cw_table_t* table)
     table->entries = NULL;
 }
 
-void cw_table_free(cw_table_t* table)
+void cw_table_free(cw_virtual_machine_t* vm, cw_table_t* table)
 {
-    CW_FREE_ARRAY(cw_table_entry_t, table->entries, table->capacity);
+    CW_FREE_ARRAY(vm, cw_table_entry_t, table->entries, table->capacity);
     cw_table_init(table);
 }
 
-void cw_table_copy(cw_table_t* from, cw_table_t* to)
+void cw_table_copy(cw_virtual_machine_t* vm, cw_table_t* from, cw_table_t* to)
 {
     for (int i = 0; i < from->capacity; i++)
     {
         cw_table_entry_t* entry = &from->entries[i];
         if (entry->key != NULL)
-            cw_table_set(to, entry->key, entry->value);
+            cw_table_set(vm, to, entry->key, entry->value);
     }
 }
 
@@ -808,9 +817,9 @@ static cw_table_entry_t* _cw_entry_find(cw_table_entry_t* entries, int capacity,
     }
 }
 
-static void _cw_table_adjust_capacity(cw_table_t* table, int capacity)
+static void _cw_table_adjust_capacity(cw_virtual_machine_t* vm, cw_table_t* table, int capacity)
 {
-    cw_table_entry_t* entries = CW_ALLOCATE(cw_table_entry_t, capacity);
+    cw_table_entry_t* entries = CW_ALLOCATE(vm, cw_table_entry_t, capacity);
     for (int i = 0; i < capacity; i++)
     {
         entries[i].key = NULL;
@@ -829,17 +838,17 @@ static void _cw_table_adjust_capacity(cw_table_t* table, int capacity)
         table->count++;
     }
 
-    CW_FREE_ARRAY(cw_table_entry_t, table->entries, table->capacity);
+    CW_FREE_ARRAY(vm, cw_table_entry_t, table->entries, table->capacity);
     table->entries = entries;
     table->capacity = capacity;
 }
 
-bool cw_table_set(cw_table_t* table, cw_obj_string_t* key, cw_value_t value)
+bool cw_table_set(cw_virtual_machine_t* vm, cw_table_t* table, cw_obj_string_t* key, cw_value_t value)
 {
     if (table->count + 1 > table->capacity * CW_TABLE_MAX_LOAD)
     {
         int capacity = CW_GROW_CAPACITY(table->capacity);
-        _cw_table_adjust_capacity(table, capacity);
+        _cw_table_adjust_capacity(vm, table, capacity);
     }
 
     cw_table_entry_t* entry = _cw_entry_find(table->entries, table->capacity, key);
@@ -901,6 +910,18 @@ cw_obj_string_t* cw_table_find_string(cw_table_t* table, const char* chars, int 
     }
 }
 
+void cw_table_remove_white(cw_table_t* table)
+{
+    for (int i = 0; i < table->capacity; i++)
+    {
+        cw_table_entry_t* entry = &table->entries[i];
+        if (entry->key != NULL && !entry->key->obj.marked)
+        {
+            cw_table_delete(table, entry->key);
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ----| Chunk |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
@@ -914,22 +935,22 @@ void cw_chunk_init(cw_chunk_t* chunk)
     cw_value_array_init(&chunk->constants);
 }
 
-void cw_chunk_free(cw_chunk_t* chunk)
+void cw_chunk_free(cw_virtual_machine_t* vm, cw_chunk_t* chunk)
 {
-    CW_FREE_ARRAY(uint8_t, chunk->code, chunk->capacity);
-    CW_FREE_ARRAY(int, chunk->lines, chunk->capacity);
-    cw_value_array_free(&chunk->constants);
+    CW_FREE_ARRAY(vm, uint8_t, chunk->code, chunk->capacity);
+    CW_FREE_ARRAY(vm, int, chunk->lines, chunk->capacity);
+    cw_value_array_free(vm, &chunk->constants);
     cw_chunk_init(chunk);
 }
 
-void cw_chunk_write(cw_chunk_t* chunk, uint8_t byte, int line)
+void cw_chunk_write(cw_virtual_machine_t* vm, cw_chunk_t* chunk, uint8_t byte, int line)
 {
     if (chunk->capacity < chunk->count + 1)
     {
         int old_capacity = chunk->capacity;
         chunk->capacity = CW_GROW_CAPACITY(old_capacity);
-        chunk->code = CW_GROW_ARRAY(chunk->code, uint8_t, old_capacity, chunk->capacity);
-        chunk->lines = CW_GROW_ARRAY(chunk->lines, int, old_capacity, chunk->capacity);
+        chunk->code = CW_GROW_ARRAY(vm, chunk->code, uint8_t, old_capacity, chunk->capacity);
+        chunk->lines = CW_GROW_ARRAY(vm, chunk->lines, int, old_capacity, chunk->capacity);
     }
 
     chunk->code[chunk->count] = byte;
@@ -937,9 +958,11 @@ void cw_chunk_write(cw_chunk_t* chunk, uint8_t byte, int line)
     chunk->count++;
 }
 
-int cw_chunk_add_constant(cw_chunk_t* chunk, cw_value_t value)
+int cw_chunk_add_constant(cw_virtual_machine_t* vm, cw_chunk_t* chunk, cw_value_t value)
 {
-    cw_value_array_write(&chunk->constants, value);
+    cw_push(vm, value);
+    cw_value_array_write(vm, &chunk->constants, value);
+    cw_pop(vm);
     return chunk->constants.count - 1;
 }
 
@@ -1327,16 +1350,16 @@ typedef struct
   bool is_local;
 } cw_upvalue_t;
 
-typedef struct _cw_struct_compiler
+struct _cw_struct_compiler
 {
-    struct _cw_struct_compiler* enclosing;
+    cw_compiler_t* enclosing;
     cw_obj_function_t* function;
     cw_function_type type;
     cw_local_t locals[CW_UINT8_COUNT];
     int local_count;
     cw_upvalue_t upvalues[CW_UINT8_COUNT];
     int scope_depth;
-} cw_compiler_t;
+};
 
 static void _cw_compiler_mark_initialized(cw_compiler_t* compiler)
 {
@@ -1495,9 +1518,9 @@ static void _cw_parser_synchronize(cw_parser_t* parser)
 // -----------------------------------------------------------------------------
 // parser constant
 
-static uint8_t _cw_parser_make_constant(cw_parser_t* parser, cw_value_t value)
+static uint8_t _cw_parser_make_constant(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_value_t value)
 {
-    int constant = cw_chunk_add_constant(_cw_current_chunk(), value);
+    int constant = cw_chunk_add_constant(vm, _cw_current_chunk(), value);
     if (constant > UINT8_MAX)
     {
         _cw_parser_error(parser, "Too many constants in one chunk.");
@@ -1508,58 +1531,58 @@ static uint8_t _cw_parser_make_constant(cw_parser_t* parser, cw_value_t value)
 
 static uint8_t _cw_parser_make_constant_indentifier(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_token_t* name)
 {
-    return _cw_parser_make_constant(parser, CW_OBJ_VAL(cw_obj_string_copy(vm, name->start, name->length)));
+    return _cw_parser_make_constant(vm, parser, CW_OBJ_VAL(cw_obj_string_copy(vm, name->start, name->length)));
 }
 
 // -----------------------------------------------------------------------------
 // parser emit
-static void _cw_parser_emit_byte(cw_parser_t* parser, uint8_t byte)
+static void _cw_parser_emit_byte(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t byte)
 {
-    cw_chunk_write(_cw_current_chunk(), byte, parser->previous.line);
+    cw_chunk_write(vm, _cw_current_chunk(), byte, parser->previous.line);
 }
 
-static void _cw_parser_emit_return(cw_parser_t* parser)
+static void _cw_parser_emit_return(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    _cw_parser_emit_byte(parser, CW_OP_NIL);
-    _cw_parser_emit_byte(parser, CW_OP_RETURN);
+    _cw_parser_emit_byte(vm, parser, CW_OP_NIL);
+    _cw_parser_emit_byte(vm, parser, CW_OP_RETURN);
 }
 
 // convenience function to write an opcode followed by a one-byte operand
-static void _cw_parser_emit_bytes(cw_parser_t* parser, uint8_t byte1, uint8_t byte2)
+static void _cw_parser_emit_bytes(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t byte1, uint8_t byte2)
 {
-    _cw_parser_emit_byte(parser, byte1);
-    _cw_parser_emit_byte(parser, byte2);
+    _cw_parser_emit_byte(vm, parser, byte1);
+    _cw_parser_emit_byte(vm, parser, byte2);
 }
 
-static void _cw_parser_emit_constant(cw_parser_t* parser, cw_value_t value)
+static void _cw_parser_emit_constant(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_value_t value)
 {
-    _cw_parser_emit_bytes(parser, CW_OP_CONSTANT, _cw_parser_make_constant(parser, value));
+    _cw_parser_emit_bytes(vm, parser, CW_OP_CONSTANT, _cw_parser_make_constant(vm, parser, value));
 }
 
-static void _cw_emit_loop(cw_parser_t* parser, int loop_start)
+static void _cw_emit_loop(cw_virtual_machine_t* vm, cw_parser_t* parser, int loop_start)
 {
-    _cw_parser_emit_byte(parser, CW_OP_LOOP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_LOOP);
 
     int offset = _cw_current_chunk()->count - loop_start + 2;
     
     if (offset > UINT16_MAX)
         _cw_parser_error(parser, "Loop body too large.");
 
-    _cw_parser_emit_byte(parser, (offset >> 8) & 0xff);
-    _cw_parser_emit_byte(parser, offset & 0xff);
+    _cw_parser_emit_byte(vm, parser, (offset >> 8) & 0xff);
+    _cw_parser_emit_byte(vm, parser, offset & 0xff);
 }
 
-static int _cw_emit_jump(cw_parser_t* parser, uint8_t instruction)
+static int _cw_emit_jump(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t instruction)
 {
-    _cw_parser_emit_byte(parser, instruction);
-    _cw_parser_emit_byte(parser, 0xff);
-    _cw_parser_emit_byte(parser, 0xff);
+    _cw_parser_emit_byte(vm, parser, instruction);
+    _cw_parser_emit_byte(vm, parser, 0xff);
+    _cw_parser_emit_byte(vm, parser, 0xff);
     return _cw_current_chunk()->count - 2;
 }
 
 // -----------------------------------------------------------------------------
 // parser variable
-static void _cw_parser_define_variable(cw_parser_t* parser, uint8_t global)
+static void _cw_parser_define_variable(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t global)
 {
     if (current_compiler->scope_depth > 0)
     {
@@ -1567,7 +1590,7 @@ static void _cw_parser_define_variable(cw_parser_t* parser, uint8_t global)
         return;
     }
 
-    _cw_parser_emit_bytes(parser, CW_OP_DEFINE_GLOBAL, global);
+    _cw_parser_emit_bytes(vm, parser, CW_OP_DEFINE_GLOBAL, global);
 }
 
 static void _cw_parser_declare_variable(cw_parser_t* parser)
@@ -1676,12 +1699,12 @@ static void _cw_expression(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
 static void _cw_number(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
-    _cw_parser_emit_constant(parser, CW_NUMBER_VAL(strtod(parser->previous.start, NULL)));
+    _cw_parser_emit_constant(vm, parser, CW_NUMBER_VAL(strtod(parser->previous.start, NULL)));
 }
 
 static void _cw_string(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
-    _cw_parser_emit_constant(parser, CW_OBJ_VAL(cw_obj_string_copy(vm, parser->previous.start + 1, parser->previous.length - 2)));
+    _cw_parser_emit_constant(vm, parser, CW_OBJ_VAL(cw_obj_string_copy(vm, parser->previous.start + 1, parser->previous.length - 2)));
 }
 
 static void _cw_variable_named(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_token_t name, bool can_assign)
@@ -1708,11 +1731,11 @@ static void _cw_variable_named(cw_virtual_machine_t* vm, cw_parser_t* parser, cw
     if (can_assign && _cw_parser_match(parser, CW_TOKEN_EQUAL))
     {
         _cw_expression(vm, parser);
-        _cw_parser_emit_bytes(parser, set_op, (uint8_t)arg);
+        _cw_parser_emit_bytes(vm, parser, set_op, (uint8_t)arg);
     }
     else
     {
-        _cw_parser_emit_bytes(parser, get_op, (uint8_t)arg);
+        _cw_parser_emit_bytes(vm, parser, get_op, (uint8_t)arg);
     }
 }
 
@@ -1737,8 +1760,8 @@ static void _cw_unary(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_as
     // Emit the operator instruction.
     switch (operatorType)
     {
-    case CW_TOKEN_BANG:    _cw_parser_emit_byte(parser, CW_OP_NOT); break;
-    case CW_TOKEN_MINUS:   _cw_parser_emit_byte(parser, CW_OP_NEGATE); break;
+    case CW_TOKEN_BANG:    _cw_parser_emit_byte(vm, parser, CW_OP_NOT); break;
+    case CW_TOKEN_MINUS:   _cw_parser_emit_byte(vm, parser, CW_OP_NEGATE); break;
     default: return; // Unreachable.
     }
 }
@@ -1755,16 +1778,16 @@ static void _cw_binary(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_a
     // Emit the operator instruction.
     switch (operatorType)
     {
-    case CW_TOKEN_BANG_EQUAL:       _cw_parser_emit_bytes(parser, CW_OP_EQUAL, CW_OP_NOT); break;
-    case CW_TOKEN_EQUAL_EQUAL:      _cw_parser_emit_byte(parser, CW_OP_EQUAL); break;
-    case CW_TOKEN_GREATER:          _cw_parser_emit_byte(parser, CW_OP_GREATER); break;
-    case CW_TOKEN_GREATER_EQUAL:    _cw_parser_emit_bytes(parser, CW_OP_LESS, CW_OP_NOT); break;
-    case CW_TOKEN_LESS:             _cw_parser_emit_byte(parser, CW_OP_LESS); break;
-    case CW_TOKEN_LESS_EQUAL:       _cw_parser_emit_bytes(parser, CW_OP_GREATER, CW_OP_NOT); break;
-    case CW_TOKEN_PLUS:             _cw_parser_emit_byte(parser, CW_OP_ADD); break;
-    case CW_TOKEN_MINUS:            _cw_parser_emit_byte(parser, CW_OP_SUBTRACT); break;
-    case CW_TOKEN_STAR:             _cw_parser_emit_byte(parser, CW_OP_MULTIPLY); break;
-    case CW_TOKEN_SLASH:            _cw_parser_emit_byte(parser, CW_OP_DIVIDE); break;
+    case CW_TOKEN_BANG_EQUAL:       _cw_parser_emit_bytes(vm, parser, CW_OP_EQUAL, CW_OP_NOT); break;
+    case CW_TOKEN_EQUAL_EQUAL:      _cw_parser_emit_byte(vm, parser, CW_OP_EQUAL); break;
+    case CW_TOKEN_GREATER:          _cw_parser_emit_byte(vm, parser, CW_OP_GREATER); break;
+    case CW_TOKEN_GREATER_EQUAL:    _cw_parser_emit_bytes(vm, parser, CW_OP_LESS, CW_OP_NOT); break;
+    case CW_TOKEN_LESS:             _cw_parser_emit_byte(vm, parser, CW_OP_LESS); break;
+    case CW_TOKEN_LESS_EQUAL:       _cw_parser_emit_bytes(vm, parser, CW_OP_GREATER, CW_OP_NOT); break;
+    case CW_TOKEN_PLUS:             _cw_parser_emit_byte(vm, parser, CW_OP_ADD); break;
+    case CW_TOKEN_MINUS:            _cw_parser_emit_byte(vm, parser, CW_OP_SUBTRACT); break;
+    case CW_TOKEN_STAR:             _cw_parser_emit_byte(vm, parser, CW_OP_MULTIPLY); break;
+    case CW_TOKEN_SLASH:            _cw_parser_emit_byte(vm, parser, CW_OP_DIVIDE); break;
     default: return; // Unreachable.
     }
 }
@@ -1773,18 +1796,18 @@ static void _cw_literal(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_
 {
     switch (parser->previous.type) 
     {
-    case CW_TOKEN_FALSE:    _cw_parser_emit_byte(parser, CW_OP_FALSE); break;
-    case CW_TOKEN_NIL:      _cw_parser_emit_byte(parser, CW_OP_NIL); break;
-    case CW_TOKEN_TRUE:     _cw_parser_emit_byte(parser, CW_OP_TRUE); break;
+    case CW_TOKEN_FALSE:    _cw_parser_emit_byte(vm, parser, CW_OP_FALSE); break;
+    case CW_TOKEN_NIL:      _cw_parser_emit_byte(vm, parser, CW_OP_NIL); break;
+    case CW_TOKEN_TRUE:     _cw_parser_emit_byte(vm, parser, CW_OP_TRUE); break;
     default: return; // Unreachable.
     }
 }
 
 static void _cw_and(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
-    int end_jump = _cw_emit_jump(parser, CW_OP_JUMP_IF_FALSE);
+    int end_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP_IF_FALSE);
 
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     _cw_parse_precedence(vm, parser, CW_PREC_AND);
     _cw_patch_jump(parser, end_jump);
@@ -1792,11 +1815,11 @@ static void _cw_and(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assi
 
 static void _cw_or(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
-    int else_jump = _cw_emit_jump(parser, CW_OP_JUMP_IF_FALSE);
-    int end_jump = _cw_emit_jump(parser, CW_OP_JUMP);
+    int else_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP_IF_FALSE);
+    int end_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
 
     _cw_patch_jump(parser, else_jump);
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     _cw_parse_precedence(vm, parser, CW_PREC_OR);
     _cw_patch_jump(parser, end_jump);
@@ -1824,7 +1847,7 @@ static uint8_t argument_list(cw_virtual_machine_t* vm, cw_parser_t* parser)
 static void _cw_call(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
     uint8_t arg_count = argument_list(vm, parser);
-    _cw_parser_emit_bytes(parser, CW_OP_CALL, arg_count);
+    _cw_parser_emit_bytes(vm, parser, CW_OP_CALL, arg_count);
 }
 
 cw_parse_rule_t _cw_parse_rules[] =
@@ -1879,18 +1902,18 @@ static cw_parse_rule_t* _cw_get_parse_rule(cw_token_type type)
 // -----------------------------------------------------------------------------
 // scope
 
-static void _cw_scope_begin(cw_parser_t* parser) { current_compiler->scope_depth++; }
+static void _cw_scope_begin() { current_compiler->scope_depth++; }
 
-static void _cw_scope_end(cw_parser_t* parser)
+static void _cw_scope_end(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     current_compiler->scope_depth--;
 
     while (current_compiler->local_count > 0 && current_compiler->locals[current_compiler->local_count - 1].depth > current_compiler->scope_depth)
     {
         if (current_compiler->locals[current_compiler->local_count - 1].is_captured)
-            _cw_parser_emit_byte(parser, CW_OP_CLOSE_UPVALUE);
+            _cw_parser_emit_byte(vm, parser, CW_OP_CLOSE_UPVALUE);
         else
-            _cw_parser_emit_byte(parser, CW_OP_POP);
+            _cw_parser_emit_byte(vm, parser, CW_OP_POP);
         current_compiler->local_count--;
     }
 }
@@ -1908,11 +1931,11 @@ static void _cw_declaration_var(cw_virtual_machine_t* vm, cw_parser_t* parser)
     if (_cw_parser_match(parser, CW_TOKEN_EQUAL))
         _cw_expression(vm, parser);
     else
-        _cw_parser_emit_byte(parser, CW_OP_NIL);
+        _cw_parser_emit_byte(vm, parser, CW_OP_NIL);
 
     _cw_parser_consume(parser, CW_TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
-    _cw_parser_define_variable(parser, global);
+    _cw_parser_define_variable(vm, parser, global);
 }
 
 static void _cw_declaration_fun(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -1920,7 +1943,7 @@ static void _cw_declaration_fun(cw_virtual_machine_t* vm, cw_parser_t* parser)
     uint8_t global = _cw_parser_make_variable(vm, parser, "Expect function name.");
     _cw_compiler_mark_initialized(current_compiler);
     _cw_function(vm, parser, CW_TYPE_FUNCTION);
-    _cw_parser_define_variable(parser, global);
+    _cw_parser_define_variable(vm, parser, global);
 }
 
 static void _cw_declaration(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -1939,14 +1962,14 @@ static void _cw_statement_expression(cw_virtual_machine_t* vm, cw_parser_t* pars
 {
     _cw_expression(vm, parser);
     _cw_parser_consume(parser, CW_TOKEN_SEMICOLON, "Expect ';' after expression.");
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 }
 
 static void _cw_statement_print(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     _cw_expression(vm, parser);
     _cw_parser_consume(parser, CW_TOKEN_SEMICOLON, "Expect ';' after value.");
-    _cw_parser_emit_byte(parser, CW_OP_PRINT);
+    _cw_parser_emit_byte(vm, parser, CW_OP_PRINT);
 }
 
 static void _cw_statement_return(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -1956,13 +1979,13 @@ static void _cw_statement_return(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
     if (_cw_parser_match(parser, CW_TOKEN_SEMICOLON))
     {
-        _cw_parser_emit_return(parser);
+        _cw_parser_emit_return(vm, parser);
     }
     else
     {
         _cw_expression(vm, parser);
         _cw_parser_consume(parser, CW_TOKEN_SEMICOLON, "Expect ';' after return value.");
-        _cw_parser_emit_byte(parser, CW_OP_RETURN);
+        _cw_parser_emit_byte(vm, parser, CW_OP_RETURN);
     }
 }
 
@@ -1972,15 +1995,15 @@ static void _cw_statement_if(cw_virtual_machine_t* vm, cw_parser_t* parser)
     _cw_expression(vm, parser);
     _cw_parser_consume(parser, CW_TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
     
-    int then_jump = _cw_emit_jump(parser, CW_OP_JUMP_IF_FALSE);
+    int then_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP_IF_FALSE);
 
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
     _cw_statement(vm, parser);
 
-    int else_jump = _cw_emit_jump(parser, CW_OP_JUMP);
+    int else_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
 
     _cw_patch_jump(parser, then_jump);
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     if (_cw_parser_match(parser, CW_TOKEN_ELSE))
         _cw_statement(vm, parser);
@@ -1996,20 +2019,20 @@ static void _cw_statement_while(cw_virtual_machine_t* vm, cw_parser_t* parser)
     _cw_expression(vm, parser);
     _cw_parser_consume(parser, CW_TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
-    int exit_jump = _cw_emit_jump(parser ,CW_OP_JUMP_IF_FALSE);
+    int exit_jump = _cw_emit_jump(vm, parser ,CW_OP_JUMP_IF_FALSE);
 
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
     _cw_statement(vm, parser);
 
-    _cw_emit_loop(parser, loop_start);
+    _cw_emit_loop(vm, parser, loop_start);
 
     _cw_patch_jump(parser, exit_jump);
-    _cw_parser_emit_byte(parser, CW_OP_POP);
+    _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 }
 
 static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    _cw_scope_begin(parser);
+    _cw_scope_begin();
     _cw_parser_consume(parser, CW_TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
 
     // Initializer clause
@@ -2036,36 +2059,36 @@ static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
         _cw_parser_consume(parser, CW_TOKEN_SEMICOLON, "Expect ';' after loop condition.");
 
         // Jump out of the loop if the condition is false.
-        exit_jump = _cw_emit_jump(parser, CW_OP_JUMP_IF_FALSE);
-        _cw_parser_emit_byte(parser, CW_OP_POP); // Condition.
+        exit_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP_IF_FALSE);
+        _cw_parser_emit_byte(vm, parser, CW_OP_POP); // Condition.
     }
 
     // Increment clause
     if (!_cw_parser_match(parser, CW_TOKEN_RIGHT_PAREN))
     {
-        int body_jump = _cw_emit_jump(parser, CW_OP_JUMP);
+        int body_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
         int increment_start = _cw_current_chunk()->count;
 
         _cw_expression(vm, parser);
-        _cw_parser_emit_byte(parser, CW_OP_POP);
+        _cw_parser_emit_byte(vm, parser, CW_OP_POP);
         _cw_parser_consume(parser, CW_TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
 
-        _cw_emit_loop(parser, loop_start);
+        _cw_emit_loop(vm, parser, loop_start);
         loop_start = increment_start;
         _cw_patch_jump(parser, body_jump);
     }
 
     _cw_statement(vm, parser);
-    _cw_emit_loop(parser, loop_start);
+    _cw_emit_loop(vm, parser, loop_start);
 
     // After the loop body, patch exit jump
     if (exit_jump != -1)
     {
         _cw_patch_jump(parser, exit_jump);
-        _cw_parser_emit_byte(parser, CW_OP_POP); // Condition.
+        _cw_parser_emit_byte(vm, parser, CW_OP_POP); // Condition.
     }
 
-    _cw_scope_end(parser);
+    _cw_scope_end(vm, parser);
 }
 
 static void _cw_block(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -2102,9 +2125,9 @@ static void _cw_statement(cw_virtual_machine_t* vm, cw_parser_t* parser)
     }
     else if (_cw_parser_match(parser, CW_TOKEN_LEFT_BRACE))
     {
-        _cw_scope_begin(parser);
+        _cw_scope_begin();
         _cw_block(vm, parser);
-        _cw_scope_end(parser);
+        _cw_scope_end(vm, parser);
     }
     else
     {
@@ -2136,9 +2159,9 @@ static void _cw_compiler_init(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_
     local->is_captured = false;
 }
 
-static cw_obj_function_t* _cw_compiler_end(cw_parser_t* parser)
+static cw_obj_function_t* _cw_compiler_end(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    _cw_parser_emit_return(parser);
+    _cw_parser_emit_return(vm, parser);
 
     cw_obj_function_t* function = current_compiler->function;
 
@@ -2168,7 +2191,7 @@ cw_obj_function_t* cw_compile(cw_virtual_machine_t* vm, const char* src)
         _cw_declaration(vm, &parser);
     }
 
-    cw_obj_function_t* function = _cw_compiler_end(&parser);
+    cw_obj_function_t* function = _cw_compiler_end(vm, &parser);
     return parser.had_error ? NULL : function;
 }
 
@@ -2176,7 +2199,7 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
 {
     cw_compiler_t compiler;
     _cw_compiler_init(vm, parser, &compiler, type);
-    _cw_scope_begin(parser);
+    _cw_scope_begin();
 
     // Compile the parameter list.
     _cw_parser_consume(parser, CW_TOKEN_LEFT_PAREN, "Expect '(' after function name.");
@@ -2191,7 +2214,7 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
             }
 
             uint8_t param_constant = _cw_parser_make_variable(vm, parser, "Expect parameter name.");
-            _cw_parser_define_variable(parser, param_constant);
+            _cw_parser_define_variable(vm, parser, param_constant);
         }
         while (_cw_parser_match(parser, CW_TOKEN_COMMA));
     }
@@ -2202,13 +2225,13 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
     _cw_block(vm, parser);
 
     // Create the function object.
-    cw_obj_function_t* function = _cw_compiler_end(parser);
-    _cw_parser_emit_bytes(parser, CW_OP_CLOSURE, _cw_parser_make_constant(parser, CW_OBJ_VAL(function)));
+    cw_obj_function_t* function = _cw_compiler_end(vm, parser);
+    _cw_parser_emit_bytes(vm, parser, CW_OP_CLOSURE, _cw_parser_make_constant(vm, parser, CW_OBJ_VAL(function)));
 
     for (int i = 0; i < function->upvalue_count; i++)
     {
-        _cw_parser_emit_byte(parser, compiler.upvalues[i].is_local ? 1 : 0);
-        _cw_parser_emit_byte(parser, compiler.upvalues[i].index);
+        _cw_parser_emit_byte(vm, parser, compiler.upvalues[i].is_local ? 1 : 0);
+        _cw_parser_emit_byte(vm, parser, compiler.upvalues[i].index);
     }
 }
 
@@ -2255,7 +2278,7 @@ static void _cw_define_native(cw_virtual_machine_t* vm, const char* name, cw_nat
 {
     cw_push(vm, CW_OBJ_VAL(cw_obj_string_copy(vm, name, (int)strlen(name))));
     cw_push(vm, CW_OBJ_VAL(cw_native_new(vm, function)));
-    cw_table_set(&vm->globals, CW_AS_STRING(vm->stack[0]), vm->stack[1]);
+    cw_table_set(vm, &vm->globals, CW_AS_STRING(vm->stack[0]), vm->stack[1]);
     cw_pop(vm);
     cw_pop(vm);
 }
@@ -2272,6 +2295,13 @@ void cw_init(cw_virtual_machine_t* vm)
     _cw_reset_stack(vm);
     vm->objects = NULL;
 
+    vm->bytes_allocated = 0;
+    vm->next_gc = 1024 * 1024;
+
+    vm->gray_count = 0;
+    vm->gray_capacity = 0;
+    vm->gray_stack = NULL;
+
     cw_table_init(&vm->globals);
     cw_table_init(&vm->strings);
 
@@ -2281,9 +2311,11 @@ void cw_init(cw_virtual_machine_t* vm)
 
 void cw_free(cw_virtual_machine_t* vm)
 {
-    cw_table_free(&vm->globals);
-    cw_table_free(&vm->strings);
+    cw_table_free(vm, &vm->globals);
+    cw_table_free(vm, &vm->strings);
     cw_objects_free(vm);
+
+    free(vm->gray_stack);
 }
 
 void cw_push(cw_virtual_machine_t* vm, cw_value_t value)
@@ -2387,16 +2419,18 @@ static void _cw_upvalues_close(cw_virtual_machine_t* vm, cw_value_t* last)
 
 static void _cw_concatenate(cw_virtual_machine_t* vm)
 {
-    cw_obj_string_t* b = CW_AS_STRING(cw_pop(vm));
-    cw_obj_string_t* a = CW_AS_STRING(cw_pop(vm));
+    cw_obj_string_t* b = CW_AS_STRING(_cw_peek(vm, 0));
+    cw_obj_string_t* a = CW_AS_STRING(_cw_peek(vm, 1));
 
     int length = a->length + b->length;
-    char* chars = CW_ALLOCATE(char, length + 1);
+    char* chars = CW_ALLOCATE(vm, char, length + 1);
     memcpy(chars, a->chars, a->length);
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
 
     cw_obj_string_t* result = cw_obj_string_move(vm, chars, length);
+    cw_pop(vm);
+    cw_pop(vm);
     cw_push(vm, CW_OBJ_VAL(result));
 }
 
@@ -2480,14 +2514,14 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
         case CW_OP_DEFINE_GLOBAL:
         {
             cw_obj_string_t* name = _CW_READ_STRING();
-            cw_table_set(&vm->globals, name, _cw_peek(vm, 0));
+            cw_table_set(vm, &vm->globals, name, _cw_peek(vm, 0));
             cw_pop(vm);
             break;
         }
         case CW_OP_SET_GLOBAL:
         {
             cw_obj_string_t* name = _CW_READ_STRING();
-            if (cw_table_set(&vm->globals, name, _cw_peek(vm, 0)))
+            if (cw_table_set(vm, &vm->globals, name, _cw_peek(vm, 0)))
             {
                 cw_table_delete(&vm->globals, name); 
                 _cw_runtime_error(vm, "Undefined variable '%s'.", name->chars);
@@ -2642,6 +2676,202 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src)
     _cw_call_value(vm, CW_OBJ_VAL(closure), 0);
 
     return _cw_run(vm);
+}
+
+
+// -----------------------------------------------------------------------------
+// ----| Memory |---------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+#define CW_GC_HEAP_GROW_FACTOR 2
+
+void* cw_memory_reallocate(cw_virtual_machine_t* vm, void* previous, size_t old_size, size_t new_size)
+{
+    vm->bytes_allocated += new_size - old_size;
+
+    if (new_size > old_size)
+    {
+#ifdef CW_DEBUG_STRESS_GC
+        cw_memory_collect_garbage(NULL);
+#endif
+        if (vm->bytes_allocated > vm->next_gc)
+            cw_memory_collect_garbage(vm);
+    }
+
+    if (new_size == 0) 
+    {
+        free(previous);
+        return NULL;
+    }
+    return realloc(previous, new_size);
+}
+
+static void _cw_gc_mark_obj(cw_virtual_machine_t* vm, cw_obj_t* object)
+{
+    if (object == NULL) return;
+    if (object->marked) return;
+
+#ifdef CW_DEBUG_LOG_GC
+    printf("%p mark ", (void*)object);
+    cw_print_value(CW_OBJ_VAL(object));
+    printf("\n");
+#endif
+
+    object->marked = true;
+
+    if (vm->gray_capacity < vm->gray_count + 1)
+    {
+        vm->gray_capacity = CW_GROW_CAPACITY(vm->gray_capacity);
+        vm->gray_stack = realloc(vm->gray_stack, sizeof(cw_obj_t*) * vm->gray_capacity);
+    }
+
+    vm->gray_stack[vm->gray_count++] = object;  
+}
+
+static void _cw_gc_mark_value(cw_virtual_machine_t* vm, cw_value_t value)
+{
+    if (!CW_IS_OBJ(value)) return;
+  
+    _cw_gc_mark_obj(vm, CW_AS_OBJ(value));
+}
+
+static void _cw_gc_mark_array(cw_virtual_machine_t* vm, cw_value_array_t* array)
+{
+    for (int i = 0; i < array->count; i++)
+    {
+        _cw_gc_mark_value(vm, array->values[i]);
+    }
+}
+
+static void _cw_gc_mark_table(cw_virtual_machine_t* vm, cw_table_t* table)
+{
+    for (int i = 0; i < table->capacity; i++)
+    {
+        cw_table_entry_t* entry = &table->entries[i];
+        _cw_gc_mark_obj(vm, (cw_obj_t*)entry->key);
+        _cw_gc_mark_value(vm, entry->value);
+    }
+}
+
+static void _cw_gc_mark_compiler(cw_virtual_machine_t* vm, cw_compiler_t* current)
+{
+    for (cw_compiler_t* compiler = current; compiler != NULL; compiler = compiler->enclosing)
+    {
+        _cw_gc_mark_obj(vm, (cw_obj_t*)compiler->function);
+    }
+}
+
+static void _cw_gc_mark_roots(cw_virtual_machine_t* vm)
+{
+    for (cw_value_t* slot = vm->stack; slot < vm->stack_top; slot++)
+    {
+        _cw_gc_mark_value(vm, *slot);
+    }
+
+    for (int i = 0; i < vm->frame_count; i++)
+    {
+        _cw_gc_mark_obj(vm, (cw_obj_t*)vm->frames[i].closure);
+    }
+
+    for (cw_obj_upvalue_t* upvalue = vm->open_upvalues; upvalue != NULL; upvalue = upvalue->next)
+    {
+        _cw_gc_mark_obj(vm, (cw_obj_t*)upvalue);
+    }
+    
+    _cw_gc_mark_table(vm, &vm->globals);
+    _cw_gc_mark_compiler(vm, current_compiler);
+}
+
+static void _cw_gc_blacken_obj(cw_virtual_machine_t* vm, cw_obj_t* object)
+{
+#ifdef CW_DEBUG_LOG_GC
+    printf("%p blacken ", (void*)object);
+    cw_print_value(CW_OBJ_VAL(object));
+    printf("\n");
+#endif 
+    switch (object->type)
+    {
+    case CW_OBJ_CLOSURE:
+    {
+        cw_obj_closure_t* closure = (cw_obj_closure_t*)object;
+        _cw_gc_mark_obj(vm, (cw_obj_t*)closure->function);
+        for (int i = 0; i < closure->upvalue_count; i++)
+        {
+            _cw_gc_mark_obj(vm, (cw_obj_t*)closure->upvalues[i]);
+        }
+        break;
+    }
+    case CW_OBJ_FUNCTION:
+    {
+        cw_obj_function_t* function = (cw_obj_function_t*)object;
+        _cw_gc_mark_obj(vm, (cw_obj_t*)function->name);
+        _cw_gc_mark_array(vm, &function->chunk.constants);
+        break;
+    }
+    case CW_OBJ_UPVALUE:
+        _cw_gc_mark_value(vm, ((cw_obj_upvalue_t*)object)->closed);
+        break; 
+    case CW_OBJ_NATIVE:
+    case CW_OBJ_STRING:
+        break;
+    }
+}
+
+static void _cw_gc_trace_refs(cw_virtual_machine_t* vm)
+{
+    while (vm->gray_count > 0)
+    {
+        cw_obj_t* object = vm->gray_stack[--vm->gray_count];
+        _cw_gc_blacken_obj(vm, object);
+    }
+}
+
+static void _cw_gc_sweep(cw_virtual_machine_t* vm)
+{
+    cw_obj_t* previous = NULL;
+    cw_obj_t* object = vm->objects;
+    while (object != NULL)
+    {
+        if (object->marked)
+        {
+            object->marked = false;
+            previous = object;
+            object = object->next;
+        }
+        else
+        {
+            cw_obj_t* unreached = object;
+
+            object = object->next;
+            if (previous != NULL)
+                previous->next = object;
+            else
+                vm->objects = object;
+
+        _cw_object_free(vm, unreached);
+        }
+    }
+}
+
+void cw_memory_collect_garbage(cw_virtual_machine_t* vm)
+{
+#ifdef CW_DEBUG_LOG_GC
+    printf("-- gc begin\n");
+    size_t before = vm->bytes_allocated;
+#endif
+
+    _cw_gc_mark_roots(vm);
+    _cw_gc_trace_refs(vm);
+    cw_table_remove_white(&vm->strings);
+    _cw_gc_sweep(vm);
+
+    vm->next_gc = vm->bytes_allocated * CW_GC_HEAP_GROW_FACTOR;
+
+#ifdef CW_DEBUG_LOG_GC
+    printf("-- gc end\n");
+    printf("   collected %ld bytes (from %ld to %ld) next at %ld\n",
+         before - vm->bytes_allocated, before, vm->bytes_allocated, vm->next_gc);
+#endif
 }
 
 #endif // CLOCKWORK_IMPLEMENTATION
