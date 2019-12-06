@@ -135,6 +135,8 @@ typedef enum
     CW_OP_GET_GLOBAL,
     CW_OP_DEFINE_GLOBAL,
     CW_OP_SET_GLOBAL,
+    CW_OP_GET_UPVALUE,
+    CW_OP_SET_UPVALUE,
     CW_OP_EQUAL,
     CW_OP_GREATER,
     CW_OP_LESS,
@@ -178,6 +180,7 @@ typedef enum
     CW_OBJ_FUNCTION,
     CW_OBJ_NATIVE,
     CW_OBJ_STRING,
+    CW_OBJ_UPVALUE
 } cw_obj_type;
 
 struct _cw_struct_obj
@@ -197,7 +200,14 @@ typedef struct
 typedef struct
 {
     cw_obj_t obj;
+    cw_value_t* location;
+} cw_obj_upvalue_t;
+
+typedef struct
+{
+    cw_obj_t obj;
     int arity;  // number of parameters the function expects
+    int upvalue_count;
     cw_chunk_t chunk;
     cw_obj_string_t* name;
 } cw_obj_function_t;
@@ -206,8 +216,9 @@ typedef struct
 {
     cw_obj_t obj;
     cw_obj_function_t* function;
+    cw_obj_upvalue_t** upvalues;
+    int upvalue_count;
 } cw_obj_closure_t;
-
 
 typedef cw_value_t (*cw_native_fn)(int arg_count, cw_value_t* args);
 
@@ -237,6 +248,7 @@ void cw_print_obj(cw_value_t value);
 cw_obj_string_t* cw_obj_string_move(cw_virtual_machine_t* vm, char* chars, int length);
 cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars, int length);
 
+cw_obj_upvalue_t* cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot);
 cw_obj_function_t* cw_function_new(cw_virtual_machine_t* vm);
 cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function);
 cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function);
@@ -531,11 +543,19 @@ cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars,
     return _cw_obj_allocate_string(vm, heap_chars, length, hash);
 }
 
+cw_obj_upvalue_t* cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot)
+{
+    cw_obj_upvalue_t* upvalue = CW_ALLOCATE_OBJ(vm, cw_obj_upvalue_t, CW_OBJ_UPVALUE);
+    upvalue->location = slot;
+    return upvalue;
+}
+
 cw_obj_function_t* cw_function_new(cw_virtual_machine_t* vm)
 {
     cw_obj_function_t* function = CW_ALLOCATE_OBJ(vm, cw_obj_function_t, CW_OBJ_FUNCTION);
 
     function->arity = 0;
+    function->upvalue_count = 0;
     function->name = NULL;
     cw_chunk_init(&function->chunk);
     return function; 
@@ -550,8 +570,16 @@ cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function)
 
 cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function)
 {
+    cw_obj_upvalue_t** upvalues = CW_ALLOCATE(cw_obj_upvalue_t*, function->upvalue_count);
+    for (int i = 0; i < function->upvalue_count; i++)
+    {
+        upvalues[i] = NULL;
+    }
+
     cw_obj_closure_t* closure = CW_ALLOCATE_OBJ(vm, cw_obj_closure_t, CW_OBJ_CLOSURE);
     closure->function = function;
+    closure->upvalues = upvalues;
+    closure->upvalue_count = function->upvalue_count;
     return closure; 
 }
 
@@ -561,6 +589,8 @@ static void _cw_object_free(cw_obj_t* object)
     {
     case CW_OBJ_CLOSURE:
     {
+        cw_obj_closure_t* closure = (cw_obj_closure_t*)object;
+        CW_FREE_ARRAY(cw_obj_upvalue_t*, closure->upvalues, closure->upvalue_count);
         CW_FREE(cw_obj_closure_t, object);
         break;
     } 
@@ -581,6 +611,9 @@ static void _cw_object_free(cw_obj_t* object)
         CW_FREE(cw_obj_string_t, object);
         break;
     }
+    case CW_OBJ_UPVALUE:
+        CW_FREE(cw_obj_upvalue_t, object);
+        break;
     }
 }
 
@@ -620,6 +653,9 @@ void cw_print_obj(cw_value_t value)
         break;
     case CW_OBJ_STRING:
         printf("%s", CW_AS_CSTRING(value));
+        break;
+    case CW_OBJ_UPVALUE:
+        printf("upvalue");
         break;
     }
 }
@@ -864,6 +900,8 @@ int cw_disassemble_instruction(cw_chunk_t* chunk, int offset)
     case CW_OP_GET_LOCAL:       return _cw_byte_instruction("OP_GET_LOCAL", chunk, offset);
     case CW_OP_SET_LOCAL:       return _cw_byte_instruction("OP_SET_LOCAL", chunk, offset);
     case CW_OP_GET_GLOBAL:      return _cw_constant_instruction("OP_GET_GLOBAL", chunk, offset);
+    case CW_OP_GET_UPVALUE:     return _cw_byte_instruction("OP_GET_UPVALUE", chunk, offset);
+    case CW_OP_SET_UPVALUE:     return _cw_byte_instruction("OP_SET_UPVALUE", chunk, offset);
     case CW_OP_DEFINE_GLOBAL:   return _cw_constant_instruction("OP_DEFINE_GLOBAL", chunk, offset);
     case CW_OP_SET_GLOBAL:      return _cw_constant_instruction("OP_SET_GLOBAL", chunk, offset);
     case CW_OP_EQUAL:           return _cw_simple_instruction("OP_EQUAL", offset);
@@ -887,6 +925,14 @@ int cw_disassemble_instruction(cw_chunk_t* chunk, int offset)
         printf("%-16s %4d ", "OP_CLOSURE", constant);
         cw_print_value(chunk->constants.values[constant]);
         printf("\n");
+
+        cw_obj_function_t* function = CW_AS_FUNCTION(chunk->constants.values[constant]);
+        for (int j = 0; j < function->upvalue_count; j++)
+        {   
+            int is_local = chunk->code[offset++];
+            int index = chunk->code[offset++];
+            printf("%04d      |                     %s %d\n", offset - 2, is_local ? "local" : "upvalue", index);
+        }
 
         return offset;
     }
@@ -1177,6 +1223,12 @@ typedef struct
     int depth;
 } cw_local_t;
 
+typedef struct
+{
+  uint8_t index;
+  bool is_local;
+} cw_upvalue_t;
+
 typedef struct _cw_struct_compiler
 {
     struct _cw_struct_compiler* enclosing;
@@ -1184,6 +1236,7 @@ typedef struct _cw_struct_compiler
     cw_function_type type;
     cw_local_t locals[CW_UINT8_COUNT];
     int local_count;
+    cw_upvalue_t upvalues[CW_UINT8_COUNT];
     int scope_depth;
 } cw_compiler_t;
 
@@ -1235,6 +1288,43 @@ static int _cw_local_resolve(cw_compiler_t* compiler, cw_parser_t* parser, cw_to
     }
     return -1;
 }
+
+static int _cw_upvalue_add(cw_compiler_t* compiler, cw_parser_t* parser, uint8_t index, bool is_local)
+{
+    int upvalue_count = compiler->function->upvalue_count;
+
+    for (int i = 0; i < upvalue_count; i++)
+    {
+        cw_upvalue_t* upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue->is_local == is_local)
+            return i;
+    }
+
+    if (upvalue_count == CW_UINT8_COUNT)
+    {
+        _cw_parser_error(parser, "Too many closure variables in function.");
+        return 0;
+    }
+
+    compiler->upvalues[upvalue_count].is_local = is_local;
+    compiler->upvalues[upvalue_count].index = index;
+    return compiler->function->upvalue_count++;
+}
+
+static int _cw_upvalue_resolve(cw_compiler_t* compiler, cw_parser_t* parser, cw_token_t* name)
+{
+    if (compiler->enclosing == NULL) return -1;
+
+    int local = _cw_local_resolve(compiler->enclosing, parser, name);
+    if (local != -1)
+        return _cw_upvalue_add(compiler, parser, (uint8_t)local, true);
+
+    int upvalue = _cw_upvalue_resolve(compiler->enclosing, parser, name);
+    if (upvalue != -1)
+        return _cw_upvalue_add(compiler, parser, (uint8_t)upvalue, false);
+
+    return -1;
+} 
 
 // -----------------------------------------------------------------------------
 // parser
@@ -1500,6 +1590,11 @@ static void _cw_variable_named(cw_virtual_machine_t* vm, cw_parser_t* parser, cw
     {
         get_op = CW_OP_GET_LOCAL;
         set_op = CW_OP_SET_LOCAL;
+    }
+    else if ((arg = _cw_upvalue_resolve(current_compiler, parser, &name)) != -1)
+    {
+        get_op = CW_OP_GET_UPVALUE;
+        set_op = CW_OP_SET_UPVALUE;
     }
     else
     {
@@ -2003,6 +2098,12 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
     // Create the function object.
     cw_obj_function_t* function = _cw_compiler_end(parser);
     _cw_parser_emit_bytes(parser, CW_OP_CLOSURE, _cw_parser_make_constant(parser, CW_OBJ_VAL(function)));
+
+    for (int i = 0; i < function->upvalue_count; i++)
+    {
+        _cw_parser_emit_byte(parser, compiler.upvalues[i].is_local ? 1 : 0);
+        _cw_parser_emit_byte(parser, compiler.upvalues[i].index);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -2136,8 +2237,14 @@ static bool _cw_call_value(cw_virtual_machine_t* vm, cw_value_t callee, int arg_
         }
     }
 
-    _cw_runtime_error(vm, "Can only call functions and classes.");
+    _cw_runtime_error(vm, "Can only call functions.");
     return false;
+}
+
+static cw_obj_upvalue_t* _cw_upvalue_capture(cw_virtual_machine_t* vm, cw_value_t* local)
+{
+    cw_obj_upvalue_t* created_upvalue = cw_upvalue_new(vm, local);
+    return created_upvalue;
 }
 
 static void _cw_concatenate(cw_virtual_machine_t* vm)
@@ -2250,6 +2357,18 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
             }
             break;
         }
+        case CW_OP_GET_UPVALUE:
+        {
+            uint8_t slot = _CW_READ_BYTE();
+            cw_push(vm, *frame->closure->upvalues[slot]->location);
+            break;
+        } 
+        case CW_OP_SET_UPVALUE:
+        {
+            uint8_t slot = _CW_READ_BYTE();
+            *frame->closure->upvalues[slot]->location = _cw_peek(vm, 0);
+            break;
+        }
         case CW_OP_EQUAL:
         {
             cw_value_t b = cw_pop(vm);
@@ -2327,6 +2446,15 @@ static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
             cw_obj_function_t* function = CW_AS_FUNCTION(_CW_READ_CONSTANT());
             cw_obj_closure_t* closure = cw_closure_new(vm, function);
             cw_push(vm, CW_OBJ_VAL(closure));
+            for (int i = 0; i < closure->upvalue_count; i++)
+            {
+                uint8_t is_local = _CW_READ_BYTE();
+                uint8_t index = _CW_READ_BYTE();
+                if (is_local)
+                    closure->upvalues[i] = _cw_upvalue_capture(vm, frame->slots + index);
+                else
+                closure->upvalues[i] = frame->closure->upvalues[index];
+            } 
             break;
         }
         case CW_OP_RETURN:
@@ -2364,8 +2492,6 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src)
         return CW_INTERPRET_COMPILE_ERROR;
 
     cw_push(vm, CW_OBJ_VAL(function));
-
-    _cw_call_value(vm, CW_OBJ_VAL(function), 0);
 
     cw_obj_closure_t* closure = cw_closure_new(vm, function);
     cw_pop(vm);

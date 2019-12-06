@@ -1,7 +1,10 @@
-
-fun greetings(name)
-{
-    print "Hello, " + "World";
+fun outer() {
+  var x = "outside";
+  print "Test";
+  fun inner() {
+    print "Test2";
+  }
+  inner();
 }
 
-greetings("World");
+outer();
