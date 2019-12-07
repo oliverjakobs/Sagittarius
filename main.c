@@ -1,8 +1,8 @@
 
-#define CW_DEBUG_PRINT_CODE
+//#define CW_DEBUG_PRINT_CODE
 //#define CW_DEBUG_TRACE_EXECUTION
 //#define CW_DEBUG_STRESS_GC
-#define CW_DEBUG_LOG_GC
+//#define CW_DEBUG_LOG_GC
 
 #define CLOCKWORK_IMPLEMENTATION
 #include "clockwork.h"

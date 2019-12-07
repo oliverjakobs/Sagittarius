@@ -91,9 +91,6 @@ arguments      → expression ( "," expression )* ;
 
 */
 
-
-
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -104,7 +101,7 @@ extern "C"
 // -----------------------------------------------------------------------------
 
 #define CW_VERSION_MAJOR    0
-#define CW_VERSION_MINOR    1
+#define CW_VERSION_MINOR    2
 
 // -----------------------------------------------------------------------------
 // ----| Common |---------------------------------------------------------------
@@ -178,8 +175,6 @@ void cw_value_array_free(cw_virtual_machine_t* vm,cw_value_array_t* array);
 void cw_value_array_write(cw_virtual_machine_t* vm,cw_value_array_t* array, cw_value_t value);
 
 bool cw_values_equal(cw_value_t a, cw_value_t b);
-
-void cw_print_value(cw_value_t value);
 
 // -----------------------------------------------------------------------------
 // ----| Chunk |----------------------------------------------------------------
@@ -309,17 +304,15 @@ bool cw_obj_is_type(cw_value_t value, cw_obj_type type);
 #define CW_AS_STRING(value)     ((cw_obj_string_t*)CW_AS_OBJ(value))
 #define CW_AS_CSTRING(value)    (((cw_obj_string_t*)CW_AS_OBJ(value))->chars)
 
-void cw_print_obj(cw_value_t value);
-
 cw_obj_string_t* cw_obj_string_move(cw_virtual_machine_t* vm, char* chars, int length);
 cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars, int length);
 
-cw_obj_upvalue_t* cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot);
-cw_obj_function_t* cw_function_new(cw_virtual_machine_t* vm);
-cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function);
-cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function);
+cw_obj_upvalue_t*   cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot);
+cw_obj_function_t*  cw_function_new(cw_virtual_machine_t* vm);
+cw_obj_native_t*    cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function);
+cw_obj_closure_t*   cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function);
 
-void cw_objects_free(cw_virtual_machine_t* vm);
+void cw_obj_free(cw_virtual_machine_t* vm, cw_obj_t* object);
 
 // -----------------------------------------------------------------------------
 // ----| Table |----------------------------------------------------------------
@@ -351,11 +344,19 @@ cw_obj_string_t* cw_table_find_string(cw_table_t* table, const char* chars, int 
 void cw_table_remove_white(cw_table_t* table);
 
 // -----------------------------------------------------------------------------
+// ----| Utility |--------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+void cw_print_value(cw_value_t value);
+void cw_print_obj(cw_value_t value);
+
+// -----------------------------------------------------------------------------
 // ----| Debug |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
 int cw_disassemble_instruction(cw_chunk_t* chunk, int offset);
 void cw_disassemble_chunk(cw_chunk_t* chunk, const char* name);
+
 
 // -----------------------------------------------------------------------------
 // ----| scanner |--------------------------------------------------------------
@@ -445,6 +446,8 @@ struct _cw_struct_vm
     cw_obj_upvalue_t* open_upvalues;
     cw_obj_t* objects;
 
+    cw_compiler_t* current_compiler;
+
     // GC
     size_t bytes_allocated;
     size_t next_gc;
@@ -496,6 +499,9 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src);
 // Non‑zero 	Larger than oldSize     Grow existing allocation.
 void* cw_memory_reallocate(cw_virtual_machine_t* vm, void* previous, size_t old_size, size_t new_size);
 
+void cw_memory_free_objects(cw_virtual_machine_t* vm);
+
+// Garbage collection
 void cw_memory_collect_garbage(cw_virtual_machine_t* vm);
 
 
@@ -557,18 +563,6 @@ bool cw_values_equal(cw_value_t a, cw_value_t b)
 
     return false;
 }
-
-void cw_print_value(cw_value_t value)
-{
-    switch (value.type)
-    {
-    case CW_VAL_BOOL:      printf(CW_AS_BOOL(value) ? "true" : "false"); break;
-    case CW_VAL_NIL:       printf("nil"); break;
-    case CW_VAL_NUMBER:    printf("%g", CW_AS_NUMBER(value)); break;
-    case CW_VAL_OBJ:       cw_print_obj(value); break;
-    }
-}
-
 
 // -----------------------------------------------------------------------------
 // ----| Object |---------------------------------------------------------------
@@ -684,12 +678,8 @@ cw_obj_closure_t* cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* fu
     return closure; 
 }
 
-static void _cw_object_free(cw_virtual_machine_t* vm, cw_obj_t* object)
+void cw_obj_free(cw_virtual_machine_t* vm, cw_obj_t* object)
 {
-#ifdef CW_DEBUG_LOG_GC
-    printf("%p free type %d\n", (void*)object, object->type);
-#endif
-
     switch (object->type)
     {
     case CW_OBJ_CLOSURE:
@@ -722,48 +712,7 @@ static void _cw_object_free(cw_virtual_machine_t* vm, cw_obj_t* object)
     }
 }
 
-void cw_objects_free(cw_virtual_machine_t* vm)
-{
-    cw_obj_t* object = vm->objects;
-    while (object != NULL)
-    {
-        cw_obj_t* next = object->next;
-        _cw_object_free(vm, object);
-        object = next;
-    }
-}
-
 bool cw_obj_is_type(cw_value_t value, cw_obj_type type) { return CW_IS_OBJ(value) && CW_AS_OBJ(value)->type == type; }
-
-static void _cw_print_function(cw_obj_function_t* function)
-{
-    if (function->name == NULL)
-        printf("<script>");
-    else
-        printf("<fn %s>", function->name->chars);
-}
-
-void cw_print_obj(cw_value_t value)
-{
-    switch (CW_OBJ_TYPE(value))
-    {
-    case CW_OBJ_CLOSURE:
-        _cw_print_function(CW_AS_CLOSURE(value)->function);
-        break;
-    case CW_OBJ_FUNCTION:
-        _cw_print_function(CW_AS_FUNCTION(value));
-        break;
-    case CW_OBJ_NATIVE:
-        printf("<native fn>");
-        break;
-    case CW_OBJ_STRING:
-        printf("%s", CW_AS_CSTRING(value));
-        break;
-    case CW_OBJ_UPVALUE:
-        printf("upvalue");
-        break;
-    }
-}
 
 // -----------------------------------------------------------------------------
 // ----| Table |----------------------------------------------------------------
@@ -967,16 +916,61 @@ int cw_chunk_add_constant(cw_virtual_machine_t* vm, cw_chunk_t* chunk, cw_value_
 }
 
 // -----------------------------------------------------------------------------
+// ----| Utility |--------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+void cw_print_value(cw_value_t value)
+{
+    switch (value.type)
+    {
+    case CW_VAL_BOOL:      printf(CW_AS_BOOL(value) ? "true" : "false"); break;
+    case CW_VAL_NIL:       printf("nil"); break;
+    case CW_VAL_NUMBER:    printf("%g", CW_AS_NUMBER(value)); break;
+    case CW_VAL_OBJ:       cw_print_obj(value); break;
+    }
+}
+
+static void _cw_print_function(cw_obj_function_t* function)
+{
+    if (function->name == NULL)
+        printf("<script>");
+    else
+        printf("<fn %s>", function->name->chars);
+}
+
+void cw_print_obj(cw_value_t value)
+{
+    switch (CW_OBJ_TYPE(value))
+    {
+    case CW_OBJ_CLOSURE:
+        _cw_print_function(CW_AS_CLOSURE(value)->function);
+        break;
+    case CW_OBJ_FUNCTION:
+        _cw_print_function(CW_AS_FUNCTION(value));
+        break;
+    case CW_OBJ_NATIVE:
+        printf("<native fn>");
+        break;
+    case CW_OBJ_STRING:
+        printf("%s", CW_AS_CSTRING(value));
+        break;
+    case CW_OBJ_UPVALUE:
+        printf("upvalue");
+        break;
+    }
+}
+
+// -----------------------------------------------------------------------------
 // ----| Debug |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-static int _cw_simple_instruction(const char* name, int offset)
+static int _cw_instruction_simple(const char* name, int offset)
 {
     printf("%s\n", name);
     return offset + 1;
 }
 
-static int _cw_constant_instruction(const char* name, cw_chunk_t* chunk, int offset)
+static int _cw_instruction_constant(const char* name, cw_chunk_t* chunk, int offset)
 {
     uint8_t constant = chunk->code[offset + 1];
     printf("%-16s %4d '", name, constant);
@@ -985,14 +979,14 @@ static int _cw_constant_instruction(const char* name, cw_chunk_t* chunk, int off
     return offset + 2;
 }
 
-static int _cw_byte_instruction(const char* name, cw_chunk_t* chunk, int offset)
+static int _cw_instruction_byte(const char* name, cw_chunk_t* chunk, int offset)
 {
     uint8_t slot = chunk->code[offset + 1];
     printf("%-16s %4d\n", name, slot);
     return offset + 2;
 }
 
-static int _cw_jump_instruction(const char* name, int sign, cw_chunk_t* chunk, int offset)
+static int _cw_instruction_jump(const char* name, int sign, cw_chunk_t* chunk, int offset)
 {
     uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
     jump |= chunk->code[offset + 2];
@@ -1011,32 +1005,32 @@ int cw_disassemble_instruction(cw_chunk_t* chunk, int offset)
     uint8_t instruction = chunk->code[offset];
     switch (instruction)
     {
-    case CW_OP_CONSTANT:        return _cw_constant_instruction("OP_CONSTANT", chunk, offset);
-    case CW_OP_NIL:             return _cw_simple_instruction("OP_NIL", offset);
-    case CW_OP_TRUE:            return _cw_simple_instruction("OP_TRUE", offset);
-    case CW_OP_FALSE:           return _cw_simple_instruction("OP_FALSE", offset);
-    case CW_OP_POP:             return _cw_simple_instruction("OP_POP", offset);
-    case CW_OP_GET_LOCAL:       return _cw_byte_instruction("OP_GET_LOCAL", chunk, offset);
-    case CW_OP_SET_LOCAL:       return _cw_byte_instruction("OP_SET_LOCAL", chunk, offset);
-    case CW_OP_GET_GLOBAL:      return _cw_constant_instruction("OP_GET_GLOBAL", chunk, offset);
-    case CW_OP_GET_UPVALUE:     return _cw_byte_instruction("OP_GET_UPVALUE", chunk, offset);
-    case CW_OP_SET_UPVALUE:     return _cw_byte_instruction("OP_SET_UPVALUE", chunk, offset);
-    case CW_OP_DEFINE_GLOBAL:   return _cw_constant_instruction("OP_DEFINE_GLOBAL", chunk, offset);
-    case CW_OP_SET_GLOBAL:      return _cw_constant_instruction("OP_SET_GLOBAL", chunk, offset);
-    case CW_OP_EQUAL:           return _cw_simple_instruction("OP_EQUAL", offset);
-    case CW_OP_GREATER:         return _cw_simple_instruction("OP_GREATER", offset);
-    case CW_OP_LESS:            return _cw_simple_instruction("OP_LESS", offset);
-    case CW_OP_ADD:             return _cw_simple_instruction("OP_ADD", offset);
-    case CW_OP_SUBTRACT:        return _cw_simple_instruction("OP_SUBTRACT", offset);
-    case CW_OP_MULTIPLY:        return _cw_simple_instruction("OP_MULTIPLY", offset);
-    case CW_OP_DIVIDE:          return _cw_simple_instruction("OP_DIVIDE", offset);
-    case CW_OP_NOT:             return _cw_simple_instruction("OP_NOT", offset);
-    case CW_OP_NEGATE:          return _cw_simple_instruction("OP_NEGATE", offset);
-    case CW_OP_PRINT:           return _cw_simple_instruction("OP_PRINT", offset);
-    case CW_OP_JUMP:            return _cw_jump_instruction("OP_JUMP", 1, chunk, offset);
-    case CW_OP_JUMP_IF_FALSE:   return _cw_jump_instruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
-    case CW_OP_LOOP:            return _cw_jump_instruction("OP_LOOP", -1, chunk, offset);
-    case CW_OP_CALL:            return _cw_byte_instruction("OP_CALL", chunk, offset);
+    case CW_OP_CONSTANT:        return _cw_instruction_constant("OP_CONSTANT", chunk, offset);
+    case CW_OP_NIL:             return _cw_instruction_simple("OP_NIL", offset);
+    case CW_OP_TRUE:            return _cw_instruction_simple("OP_TRUE", offset);
+    case CW_OP_FALSE:           return _cw_instruction_simple("OP_FALSE", offset);
+    case CW_OP_POP:             return _cw_instruction_simple("OP_POP", offset);
+    case CW_OP_GET_LOCAL:       return _cw_instruction_byte("OP_GET_LOCAL", chunk, offset);
+    case CW_OP_SET_LOCAL:       return _cw_instruction_byte("OP_SET_LOCAL", chunk, offset);
+    case CW_OP_GET_GLOBAL:      return _cw_instruction_constant("OP_GET_GLOBAL", chunk, offset);
+    case CW_OP_GET_UPVALUE:     return _cw_instruction_byte("OP_GET_UPVALUE", chunk, offset);
+    case CW_OP_SET_UPVALUE:     return _cw_instruction_byte("OP_SET_UPVALUE", chunk, offset);
+    case CW_OP_DEFINE_GLOBAL:   return _cw_instruction_constant("OP_DEFINE_GLOBAL", chunk, offset);
+    case CW_OP_SET_GLOBAL:      return _cw_instruction_constant("OP_SET_GLOBAL", chunk, offset);
+    case CW_OP_EQUAL:           return _cw_instruction_simple("OP_EQUAL", offset);
+    case CW_OP_GREATER:         return _cw_instruction_simple("OP_GREATER", offset);
+    case CW_OP_LESS:            return _cw_instruction_simple("OP_LESS", offset);
+    case CW_OP_ADD:             return _cw_instruction_simple("OP_ADD", offset);
+    case CW_OP_SUBTRACT:        return _cw_instruction_simple("OP_SUBTRACT", offset);
+    case CW_OP_MULTIPLY:        return _cw_instruction_simple("OP_MULTIPLY", offset);
+    case CW_OP_DIVIDE:          return _cw_instruction_simple("OP_DIVIDE", offset);
+    case CW_OP_NOT:             return _cw_instruction_simple("OP_NOT", offset);
+    case CW_OP_NEGATE:          return _cw_instruction_simple("OP_NEGATE", offset);
+    case CW_OP_PRINT:           return _cw_instruction_simple("OP_PRINT", offset);
+    case CW_OP_JUMP:            return _cw_instruction_jump("OP_JUMP", 1, chunk, offset);
+    case CW_OP_JUMP_IF_FALSE:   return _cw_instruction_jump("OP_JUMP_IF_FALSE", 1, chunk, offset);
+    case CW_OP_LOOP:            return _cw_instruction_jump("OP_LOOP", -1, chunk, offset);
+    case CW_OP_CALL:            return _cw_instruction_byte("OP_CALL", chunk, offset);
     case CW_OP_CLOSURE:
     {
         offset++;
@@ -1055,8 +1049,8 @@ int cw_disassemble_instruction(cw_chunk_t* chunk, int offset)
 
         return offset;
     }
-    case CW_OP_CLOSE_UPVALUE:   return _cw_simple_instruction("OP_CLOSE_UPVALUE", offset);
-    case CW_OP_RETURN:          return _cw_simple_instruction("OP_RETURN", offset);
+    case CW_OP_CLOSE_UPVALUE:   return _cw_instruction_simple("OP_CLOSE_UPVALUE", offset);
+    case CW_OP_RETURN:          return _cw_instruction_simple("OP_RETURN", offset);
     default:
         printf("Unknown opcode %d\n", instruction);
         return offset + 1;
@@ -1368,11 +1362,9 @@ static void _cw_compiler_mark_initialized(cw_compiler_t* compiler)
     compiler->locals[compiler->local_count - 1].depth = compiler->scope_depth;
 }
 
-cw_compiler_t* current_compiler = NULL;
-
-cw_chunk_t* _cw_current_chunk()
+cw_chunk_t* _cw_current_chunk(cw_compiler_t* compiler)
 {
-    return &current_compiler->function->chunk;
+    return &compiler->function->chunk;
 }
 
 static bool _cw_identifiers_equal(cw_token_t* a, cw_token_t* b)
@@ -1520,7 +1512,7 @@ static void _cw_parser_synchronize(cw_parser_t* parser)
 
 static uint8_t _cw_parser_make_constant(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_value_t value)
 {
-    int constant = cw_chunk_add_constant(vm, _cw_current_chunk(), value);
+    int constant = cw_chunk_add_constant(vm, _cw_current_chunk(vm->current_compiler), value);
     if (constant > UINT8_MAX)
     {
         _cw_parser_error(parser, "Too many constants in one chunk.");
@@ -1538,7 +1530,7 @@ static uint8_t _cw_parser_make_constant_indentifier(cw_virtual_machine_t* vm, cw
 // parser emit
 static void _cw_parser_emit_byte(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t byte)
 {
-    cw_chunk_write(vm, _cw_current_chunk(), byte, parser->previous.line);
+    cw_chunk_write(vm, _cw_current_chunk(vm->current_compiler), byte, parser->previous.line);
 }
 
 static void _cw_parser_emit_return(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -1563,7 +1555,7 @@ static void _cw_emit_loop(cw_virtual_machine_t* vm, cw_parser_t* parser, int loo
 {
     _cw_parser_emit_byte(vm, parser, CW_OP_LOOP);
 
-    int offset = _cw_current_chunk()->count - loop_start + 2;
+    int offset = _cw_current_chunk(vm->current_compiler)->count - loop_start + 2;
     
     if (offset > UINT16_MAX)
         _cw_parser_error(parser, "Loop body too large.");
@@ -1577,47 +1569,47 @@ static int _cw_emit_jump(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t 
     _cw_parser_emit_byte(vm, parser, instruction);
     _cw_parser_emit_byte(vm, parser, 0xff);
     _cw_parser_emit_byte(vm, parser, 0xff);
-    return _cw_current_chunk()->count - 2;
+    return _cw_current_chunk(vm->current_compiler)->count - 2;
 }
 
 // -----------------------------------------------------------------------------
 // parser variable
 static void _cw_parser_define_variable(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t global)
 {
-    if (current_compiler->scope_depth > 0)
+    if (vm->current_compiler->scope_depth > 0)
     {
-        _cw_compiler_mark_initialized(current_compiler);
+        _cw_compiler_mark_initialized(vm->current_compiler);
         return;
     }
 
     _cw_parser_emit_bytes(vm, parser, CW_OP_DEFINE_GLOBAL, global);
 }
 
-static void _cw_parser_declare_variable(cw_parser_t* parser)
+static void _cw_parser_declare_variable(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     // Global variables are implicitly declared.
-    if (current_compiler->scope_depth == 0) return;
+    if (vm->current_compiler->scope_depth == 0) return;
 
     cw_token_t* name = &parser->previous;
-    for (int i = current_compiler->local_count - 1; i >= 0; i--)
+    for (int i = vm->current_compiler->local_count - 1; i >= 0; i--)
     {
-        cw_local_t* local = &current_compiler->locals[i];
-        if (local->depth != -1 && local->depth < current_compiler->scope_depth)
+        cw_local_t* local = &vm->current_compiler->locals[i];
+        if (local->depth != -1 && local->depth < vm->current_compiler->scope_depth)
             break;
 
         if (_cw_identifiers_equal(name, &local->name))
             _cw_parser_error(parser, "Variable with this name already declared in this scope.");
     }
 
-    _cw_local_add(current_compiler, parser, *name);
+    _cw_local_add(vm->current_compiler, parser, *name);
 }
 
 static uint8_t _cw_parser_make_variable(cw_virtual_machine_t* vm, cw_parser_t* parser, const char* error_message)
 {
     _cw_parser_consume(parser, CW_TOKEN_IDENTIFIER, error_message);
 
-    _cw_parser_declare_variable(parser);
-    if (current_compiler->scope_depth > 0) return 0;
+    _cw_parser_declare_variable(vm, parser);
+    if (vm->current_compiler->scope_depth > 0) return 0;
 
     return _cw_parser_make_constant_indentifier(vm, parser, &parser->previous);
 }
@@ -1625,16 +1617,16 @@ static uint8_t _cw_parser_make_variable(cw_virtual_machine_t* vm, cw_parser_t* p
 // -----------------------------------------------------------------------------
 // jump
 
-static void _cw_patch_jump(cw_parser_t* parser, int offset)
+static void _cw_patch_jump(cw_virtual_machine_t* vm, cw_parser_t* parser, int offset)
 {
     // -2 to adjust for the bytecode for the jump offset itself.
-    int jump = _cw_current_chunk()->count - offset - 2;
+    int jump = _cw_current_chunk(vm->current_compiler)->count - offset - 2;
 
     if (jump > UINT16_MAX)
         _cw_parser_error(parser, "Too much code to jump over.");
 
-    _cw_current_chunk()->code[offset] = (jump >> 8) & 0xff;
-    _cw_current_chunk()->code[offset + 1] = jump & 0xff;
+    _cw_current_chunk(vm->current_compiler)->code[offset] = (jump >> 8) & 0xff;
+    _cw_current_chunk(vm->current_compiler)->code[offset + 1] = jump & 0xff;
 }
 
 // -----------------------------------------------------------------------------
@@ -1710,13 +1702,13 @@ static void _cw_string(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_a
 static void _cw_variable_named(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_token_t name, bool can_assign)
 {
     uint8_t get_op, set_op;
-    int arg = _cw_local_resolve(current_compiler, parser, &name);
+    int arg = _cw_local_resolve(vm->current_compiler, parser, &name);
     if (arg != -1)
     {
         get_op = CW_OP_GET_LOCAL;
         set_op = CW_OP_SET_LOCAL;
     }
-    else if ((arg = _cw_upvalue_resolve(current_compiler, parser, &name)) != -1)
+    else if ((arg = _cw_upvalue_resolve(vm->current_compiler, parser, &name)) != -1)
     {
         get_op = CW_OP_GET_UPVALUE;
         set_op = CW_OP_SET_UPVALUE;
@@ -1810,7 +1802,7 @@ static void _cw_and(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assi
     _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     _cw_parse_precedence(vm, parser, CW_PREC_AND);
-    _cw_patch_jump(parser, end_jump);
+    _cw_patch_jump(vm, parser, end_jump);
 }
 
 static void _cw_or(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
@@ -1818,11 +1810,11 @@ static void _cw_or(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assig
     int else_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP_IF_FALSE);
     int end_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
 
-    _cw_patch_jump(parser, else_jump);
+    _cw_patch_jump(vm, parser, else_jump);
     _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     _cw_parse_precedence(vm, parser, CW_PREC_OR);
-    _cw_patch_jump(parser, end_jump);
+    _cw_patch_jump(vm, parser, end_jump);
 }
 
 static uint8_t argument_list(cw_virtual_machine_t* vm, cw_parser_t* parser)
@@ -1902,19 +1894,19 @@ static cw_parse_rule_t* _cw_get_parse_rule(cw_token_type type)
 // -----------------------------------------------------------------------------
 // scope
 
-static void _cw_scope_begin() { current_compiler->scope_depth++; }
+static void _cw_scope_begin(cw_virtual_machine_t* vm) { vm->current_compiler->scope_depth++; }
 
 static void _cw_scope_end(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    current_compiler->scope_depth--;
+    vm->current_compiler->scope_depth--;
 
-    while (current_compiler->local_count > 0 && current_compiler->locals[current_compiler->local_count - 1].depth > current_compiler->scope_depth)
+    while (vm->current_compiler->local_count > 0 && vm->current_compiler->locals[vm->current_compiler->local_count - 1].depth > vm->current_compiler->scope_depth)
     {
-        if (current_compiler->locals[current_compiler->local_count - 1].is_captured)
+        if (vm->current_compiler->locals[vm->current_compiler->local_count - 1].is_captured)
             _cw_parser_emit_byte(vm, parser, CW_OP_CLOSE_UPVALUE);
         else
             _cw_parser_emit_byte(vm, parser, CW_OP_POP);
-        current_compiler->local_count--;
+        vm->current_compiler->local_count--;
     }
 }
 
@@ -1941,7 +1933,7 @@ static void _cw_declaration_var(cw_virtual_machine_t* vm, cw_parser_t* parser)
 static void _cw_declaration_fun(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     uint8_t global = _cw_parser_make_variable(vm, parser, "Expect function name.");
-    _cw_compiler_mark_initialized(current_compiler);
+    _cw_compiler_mark_initialized(vm->current_compiler);
     _cw_function(vm, parser, CW_TYPE_FUNCTION);
     _cw_parser_define_variable(vm, parser, global);
 }
@@ -1974,7 +1966,7 @@ static void _cw_statement_print(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
 static void _cw_statement_return(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    if (current_compiler->type == CW_TYPE_SCRIPT)
+    if (vm->current_compiler->type == CW_TYPE_SCRIPT)
         _cw_parser_error(parser, "Cannot return from top-level code.");
 
     if (_cw_parser_match(parser, CW_TOKEN_SEMICOLON))
@@ -2002,18 +1994,18 @@ static void _cw_statement_if(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
     int else_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
 
-    _cw_patch_jump(parser, then_jump);
+    _cw_patch_jump(vm, parser, then_jump);
     _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 
     if (_cw_parser_match(parser, CW_TOKEN_ELSE))
         _cw_statement(vm, parser);
     
-    _cw_patch_jump(parser, else_jump);
+    _cw_patch_jump(vm, parser, else_jump);
 }
 
 static void _cw_statement_while(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    int loop_start = _cw_current_chunk()->count; 
+    int loop_start = _cw_current_chunk(vm->current_compiler)->count; 
 
     _cw_parser_consume(parser, CW_TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
     _cw_expression(vm, parser);
@@ -2026,13 +2018,13 @@ static void _cw_statement_while(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
     _cw_emit_loop(vm, parser, loop_start);
 
-    _cw_patch_jump(parser, exit_jump);
+    _cw_patch_jump(vm, parser, exit_jump);
     _cw_parser_emit_byte(vm, parser, CW_OP_POP);
 }
 
 static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
-    _cw_scope_begin();
+    _cw_scope_begin(vm);
     _cw_parser_consume(parser, CW_TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
 
     // Initializer clause
@@ -2049,7 +2041,7 @@ static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
         _cw_statement_expression(vm, parser);
     }
 
-    int loop_start = _cw_current_chunk()->count;
+    int loop_start = _cw_current_chunk(vm->current_compiler)->count;
 
     // Condition clause
     int exit_jump = -1;
@@ -2067,7 +2059,7 @@ static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
     if (!_cw_parser_match(parser, CW_TOKEN_RIGHT_PAREN))
     {
         int body_jump = _cw_emit_jump(vm, parser, CW_OP_JUMP);
-        int increment_start = _cw_current_chunk()->count;
+        int increment_start = _cw_current_chunk(vm->current_compiler)->count;
 
         _cw_expression(vm, parser);
         _cw_parser_emit_byte(vm, parser, CW_OP_POP);
@@ -2075,7 +2067,7 @@ static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
         _cw_emit_loop(vm, parser, loop_start);
         loop_start = increment_start;
-        _cw_patch_jump(parser, body_jump);
+        _cw_patch_jump(vm, parser, body_jump);
     }
 
     _cw_statement(vm, parser);
@@ -2084,7 +2076,7 @@ static void _cw_statement_for(cw_virtual_machine_t* vm, cw_parser_t* parser)
     // After the loop body, patch exit jump
     if (exit_jump != -1)
     {
-        _cw_patch_jump(parser, exit_jump);
+        _cw_patch_jump(vm, parser, exit_jump);
         _cw_parser_emit_byte(vm, parser, CW_OP_POP); // Condition.
     }
 
@@ -2125,7 +2117,7 @@ static void _cw_statement(cw_virtual_machine_t* vm, cw_parser_t* parser)
     }
     else if (_cw_parser_match(parser, CW_TOKEN_LEFT_BRACE))
     {
-        _cw_scope_begin();
+        _cw_scope_begin(vm);
         _cw_block(vm, parser);
         _cw_scope_end(vm, parser);
     }
@@ -2140,19 +2132,19 @@ static void _cw_statement(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
 static void _cw_compiler_init(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_compiler_t* compiler, cw_function_type type)
 {
-    compiler->enclosing = current_compiler;
+    compiler->enclosing = vm->current_compiler;
     compiler->function = NULL;
     compiler->type = type;
 
     compiler->local_count = 0;
     compiler->scope_depth = 0;
     compiler->function = cw_function_new(vm);
-    current_compiler = compiler;
+    vm->current_compiler = compiler;
 
     if (type != CW_TYPE_SCRIPT) 
-        current_compiler->function->name = cw_obj_string_copy(vm, parser->previous.start, parser->previous.length);
+        vm->current_compiler->function->name = cw_obj_string_copy(vm, parser->previous.start, parser->previous.length);
 
-    cw_local_t* local = &current_compiler->locals[current_compiler->local_count++];
+    cw_local_t* local = &vm->current_compiler->locals[vm->current_compiler->local_count++];
     local->depth = 0;
     local->name.start = "";
     local->name.length = 0;
@@ -2163,13 +2155,13 @@ static cw_obj_function_t* _cw_compiler_end(cw_virtual_machine_t* vm, cw_parser_t
 {
     _cw_parser_emit_return(vm, parser);
 
-    cw_obj_function_t* function = current_compiler->function;
+    cw_obj_function_t* function = vm->current_compiler->function;
 
 #ifdef CW_DEBUG_PRINT_CODE
     if (!parser->had_error)
-        cw_disassemble_chunk(_cw_current_chunk(), function->name != NULL ? function->name->chars : "<script>");
+        cw_disassemble_chunk(_cw_current_chunk(vm->current_compiler), function->name != NULL ? function->name->chars : "<script>");
 #endif
-    current_compiler = current_compiler->enclosing;
+    vm->current_compiler = vm->current_compiler->enclosing;
     return function;
 }
 
@@ -2199,7 +2191,7 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
 {
     cw_compiler_t compiler;
     _cw_compiler_init(vm, parser, &compiler, type);
-    _cw_scope_begin();
+    _cw_scope_begin(vm);
 
     // Compile the parameter list.
     _cw_parser_consume(parser, CW_TOKEN_LEFT_PAREN, "Expect '(' after function name.");
@@ -2207,8 +2199,8 @@ static void _cw_function(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_funct
     {
         do 
         {
-            current_compiler->function->arity++;
-            if (current_compiler->function->arity > 255)
+            vm->current_compiler->function->arity++;
+            if (vm->current_compiler->function->arity > 255)
             {
                 _cw_parser_error_at_current(parser, "Cannot have more than 255 parameters.");
             }
@@ -2294,6 +2286,7 @@ void cw_init(cw_virtual_machine_t* vm)
 {
     _cw_reset_stack(vm);
     vm->objects = NULL;
+    vm->current_compiler = NULL;
 
     vm->bytes_allocated = 0;
     vm->next_gc = 1024 * 1024;
@@ -2313,9 +2306,8 @@ void cw_free(cw_virtual_machine_t* vm)
 {
     cw_table_free(vm, &vm->globals);
     cw_table_free(vm, &vm->strings);
-    cw_objects_free(vm);
 
-    free(vm->gray_stack);
+    cw_memory_free_objects(vm);
 }
 
 void cw_push(cw_virtual_machine_t* vm, cw_value_t value)
@@ -2706,6 +2698,23 @@ void* cw_memory_reallocate(cw_virtual_machine_t* vm, void* previous, size_t old_
     return realloc(previous, new_size);
 }
 
+void cw_memory_free_objects(cw_virtual_machine_t* vm)
+{
+    cw_obj_t* object = vm->objects;
+    while (object != NULL)
+    {
+        cw_obj_t* next = object->next;
+        
+#ifdef CW_DEBUG_LOG_GC
+        printf("%p free type %d\n", (void*)object, object->type);
+#endif
+        cw_obj_free(vm, object);
+        object = next;
+    }
+
+    free(vm->gray_stack);
+}
+
 static void _cw_gc_mark_obj(cw_virtual_machine_t* vm, cw_obj_t* object)
 {
     if (object == NULL) return;
@@ -2779,7 +2788,7 @@ static void _cw_gc_mark_roots(cw_virtual_machine_t* vm)
     }
     
     _cw_gc_mark_table(vm, &vm->globals);
-    _cw_gc_mark_compiler(vm, current_compiler);
+    _cw_gc_mark_compiler(vm, vm->current_compiler);
 }
 
 static void _cw_gc_blacken_obj(cw_virtual_machine_t* vm, cw_obj_t* object)
@@ -2848,7 +2857,7 @@ static void _cw_gc_sweep(cw_virtual_machine_t* vm)
             else
                 vm->objects = object;
 
-        _cw_object_free(vm, unreached);
+        cw_obj_free(vm, unreached);
         }
     }
 }
