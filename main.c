@@ -1,5 +1,5 @@
 
-//#define CW_DEBUG_PRINT_CODE
+#define CW_DEBUG_PRINT_BYTE_CODE
 //#define CW_DEBUG_TRACE_EXECUTION
 //#define CW_DEBUG_STRESS_GC
 //#define CW_DEBUG_LOG_GC
@@ -78,9 +78,6 @@ int main(int argc, const char* argv[])
 {
     cw_virtual_machine_t vm;
     cw_init(&vm);
-
-    // todo: add functions
-    // _cw_define_native(&vm, "name", function);
 
     if (argc == 1)
     {

@@ -137,6 +137,9 @@ typedef enum
     CW_VAL_OBJ
 } cw_value_type;
 
+/*
+    Tagged union to dynamically handle different types
+*/
 typedef struct
 {
     cw_value_type type;
@@ -148,15 +151,22 @@ typedef struct
     } as;
 } cw_value_t;
 
+/*
+    Marcos to check if a value is of a specific type
+*/
 #define CW_IS_BOOL(value)       ((value).type == CW_VAL_BOOL)
 #define CW_IS_NIL(value)        ((value).type == CW_VAL_NIL)
 #define CW_IS_NUMBER(value)     ((value).type == CW_VAL_NUMBER)
 #define CW_IS_OBJ(value)        ((value).type == CW_VAL_OBJ)
-
+/*
+    Marcos to return value as a specific type
+*/
 #define CW_AS_BOOL(value)       ((value).as.boolean)
 #define CW_AS_NUMBER(value)     ((value).as.number)
 #define CW_AS_OBJ(value)        ((value).as.obj)
-
+/*
+    Marcos to create a new value with a specific type
+*/
 #define CW_BOOL_VAL(value)      ((cw_value_t) { CW_VAL_BOOL,    { .boolean = value }})
 #define CW_NIL_VAL              ((cw_value_t) { CW_VAL_NIL,     { .number = 0 }})
 #define CW_NUMBER_VAL(value)    ((cw_value_t) { CW_VAL_NUMBER,  { .number = value }})
@@ -167,7 +177,6 @@ bool cw_values_equal(cw_value_t a, cw_value_t b);
 
 /*
     Dynamic array of values
-
 */
 typedef struct
 {
@@ -184,6 +193,18 @@ void cw_value_array_write(cw_virtual_machine_t* vm, cw_value_array_t* array, cw_
 // ----| Chunk |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+/*
+    Chunks of bytecode 
+
+    each instruction has an one-byte operation code (cw_op_code)
+    a chunk contains a dynamic uint8_t array of bytecode and pool of constants
+
+    Line information:
+    when a runtime error occurs the line number of the offending source code is
+    diplayed.
+
+    TODO: run-length encoding of the line numbers
+*/
 typedef enum
 {
     CW_OP_CONSTANT,
@@ -228,8 +249,15 @@ typedef struct
 
 void cw_chunk_init(cw_chunk_t* chunk);
 void cw_chunk_free(cw_virtual_machine_t* vm, cw_chunk_t* chunk);
+
+/*
+    append a byte to the end of the chunk
+*/ 
 void cw_chunk_write(cw_virtual_machine_t* vm, cw_chunk_t* chunk, uint8_t byte, int line);
 
+/*
+    add a new constant to the chunk
+*/
 int cw_chunk_add_constant(cw_virtual_machine_t* vm, cw_chunk_t* chunk, cw_value_t value);
 
 // -----------------------------------------------------------------------------
@@ -245,6 +273,10 @@ typedef enum
     CW_OBJ_UPVALUE
 } cw_obj_type;
 
+/*
+    base object
+
+*/
 struct _cw_struct_obj
 {
     cw_obj_type type;
@@ -360,6 +392,10 @@ void cw_print_obj(cw_value_t value);
 // ----| Debug |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+
+/* 
+    convert the bytecode into human readable instructions
+*/
 int cw_disassemble_instruction(cw_chunk_t* chunk, int offset);
 void cw_disassemble_chunk(cw_chunk_t* chunk, const char* name);
 
@@ -409,6 +445,9 @@ typedef struct
 
 void cw_scanner_init(cw_scanner_t* scanner, const char* src);
 
+/*
+    scans the source code until the it reaches the end and returns an EOF token
+*/
 cw_token_t cw_token_scan(cw_scanner_t* scanner);
 
 // -----------------------------------------------------------------------------
@@ -441,11 +480,16 @@ typedef struct
     cw_value_t* slots;
 } cw_call_frame_t;
 
+
+/*
+    a stack based virtual machine
+*/
 struct _cw_struct_vm
 {
     cw_call_frame_t frames[CW_FRAMES_MAX];
     int frame_count;
 
+    // stack
     cw_value_t stack[CW_STACK_MAX];
     cw_value_t* stack_top;
 
@@ -476,18 +520,41 @@ typedef enum
 void cw_init(cw_virtual_machine_t* vm);
 void cw_free(cw_virtual_machine_t* vm);
 
+/*
+    stack operations
+
+    cw_push: push a new value onto the top of the stack
+    cw_pop:  pop the most recently pushed value back off
+*/
 void cw_push(cw_virtual_machine_t* vm, cw_value_t v);
 cw_value_t cw_pop(cw_virtual_machine_t* vm);
 
+/*
+    define CW_DISABLE_NATIVES to disable all predefined natives
+    
+    define a new native function in c to be used in the script
+
+    name:       the name by which the function is called
+    arity:      the arity of the function
+    function:   points to the corresponding C function
+*/
+void cw_define_native(cw_virtual_machine_t* vm, const char* name, int arity, cw_native_fn function);
+
+/*
+    The main entry point into the virtual machine.
+    the VM runs the chunk and then responds with a cw_interpret_result
+*/
 cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src);
 
 // -----------------------------------------------------------------------------
 // ----| Memory |---------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// calculates a new capacity based on a given current capacity. It scales based 
-// on the old size and grows by a factor of two. If the current capacity is zero
-// we jump straight to eight elements instead of starting at one.
+/*
+    calculates a new capacity based on a given current capacity. It scales based 
+    on the old size and grows by a factor of two. If the current capacity is zero
+    we jump straight to eight elements instead of starting at one.
+*/
 #define CW_GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity) * 2)
 
 // wrapper for cw_memory_reallocate
@@ -497,14 +564,16 @@ cw_interpret_result cw_interpret(cw_virtual_machine_t* vm, const char* src);
 #define CW_GROW_ARRAY(vm, previous, type, oldCount, count)  (type*)cw_memory_reallocate(vm, previous, sizeof(type) * (oldCount), sizeof(type) * (count))
 #define CW_FREE_ARRAY(vm, type, pointer, oldCount)          cw_memory_reallocate(vm, pointer, sizeof(type) * (oldCount), 0)
 
-// The single function for all dynamic memory management
-// The two size arguments passed to cw_memory_reallocate() control which 
-// operation to perform:
-// oldSize      newSize                 Operation
-// 0            Non‑zero                Allocate new block.
-// Non‑zero     0                       Free allocation.
-// Non‑zero     Smaller than oldSize    Shrink existing allocation.
-// Non‑zero 	Larger than oldSize     Grow existing allocation.
+/*
+    The single function for all dynamic memory management
+    The two size arguments passed to cw_memory_reallocate() control which 
+    operation to perform:
+    oldSize     newSize                 Operation
+    0           Non‑zero                Allocate new block.
+    Non‑zero    0                       Free allocation.
+    Non‑zero    Smaller than oldSize    Shrink existing allocation.
+    Non‑zero    Larger than oldSize     Grow existing allocation.
+*/
 void* cw_memory_reallocate(cw_virtual_machine_t* vm, void* previous, size_t old_size, size_t new_size);
 
 void cw_memory_free_objects(cw_virtual_machine_t* vm);
@@ -884,6 +953,9 @@ void cw_table_remove_white(cw_table_t* table)
 // ----| Chunk |----------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+/*
+    initialize a new empty chunk
+*/
 void cw_chunk_init(cw_chunk_t* chunk)
 {
     chunk->count = 0;
@@ -901,6 +973,9 @@ void cw_chunk_free(cw_virtual_machine_t* vm, cw_chunk_t* chunk)
     cw_chunk_init(chunk);
 }
 
+/*
+    if the new byte exceeds the capacity of the code array grow the array to a new capacity
+*/
 void cw_chunk_write(cw_virtual_machine_t* vm, cw_chunk_t* chunk, uint8_t byte, int line)
 {
     if (chunk->capacity < chunk->count + 1)
@@ -1126,6 +1201,10 @@ static cw_token_type _cw_scanner_check_keyword(cw_scanner_t* scanner, int start,
     return CW_TOKEN_IDENTIFIER;
 }
 
+/*
+    the scanner needs to handle spaces, tabs and newlines, but those characters aren't part of any token's lexeme.
+    So this function advances past any leading whitespace and comments
+*/
 static void _cw_scanner_skip_whitespace(cw_scanner_t* scanner)
 {
     while(true)
@@ -1153,6 +1232,9 @@ static void _cw_scanner_skip_whitespace(cw_scanner_t* scanner)
     }
 }
 
+/*
+    switch statement to get the identifier type (if the scanner found one)
+*/
 static cw_token_type _cw_scanner_identifier_type(cw_scanner_t* scanner)
 {
     switch (scanner->start[0])
@@ -2155,7 +2237,7 @@ static cw_obj_function_t* _cw_compiler_end(cw_virtual_machine_t* vm, cw_parser_t
 
     cw_obj_function_t* function = vm->current_compiler->function;
 
-#ifdef CW_DEBUG_PRINT_CODE
+#ifdef CW_DEBUG_PRINT_BYTE_CODE
     if (!parser->had_error)
         cw_disassemble_chunk(_cw_current_chunk(vm->current_compiler), function->name != NULL ? function->name->chars : "<script>");
 #endif
@@ -2264,7 +2346,8 @@ static void _cw_runtime_error(cw_virtual_machine_t* vm, const char* format, ...)
 // -----------------------------------------------------------------------------
 // naitve
 
-static void _cw_define_native(cw_virtual_machine_t* vm, const char* name, int arity, cw_native_fn function)
+
+void cw_define_native(cw_virtual_machine_t* vm, const char* name, int arity, cw_native_fn function)
 {
     cw_push(vm, CW_OBJ_VAL(cw_obj_string_copy(vm, name, (int)strlen(name))));
     cw_push(vm, CW_OBJ_VAL(cw_native_new(vm, arity, function)));
@@ -2274,14 +2357,19 @@ static void _cw_define_native(cw_virtual_machine_t* vm, const char* name, int ar
 }
 
 #ifndef CW_DISABLE_NATIVES
-
 #include <time.h>
 
+/*
+    returns the number of seconds elapsed since the program was launched
+*/
 static cw_value_t _cw_native_fun_clock(cw_virtual_machine_t* vm, int arg_count, cw_value_t* args) 
 {
     return CW_NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
+/*
+    converts value to obj_string value
+*/
 static cw_value_t _cw_native_fun_string(cw_virtual_machine_t* vm, int arg_count, cw_value_t* args)
 {
     switch (args[0].type)
@@ -2330,8 +2418,8 @@ void cw_init(cw_virtual_machine_t* vm)
 
 #ifndef CW_DISABLE_NATIVES
     // natives
-    _cw_define_native(vm, "clock", 0, _cw_native_fun_clock);
-    _cw_define_native(vm, "string", 1, _cw_native_fun_string);
+    cw_define_native(vm, "clock", 0, _cw_native_fun_clock);
+    cw_define_native(vm, "string", 1, _cw_native_fun_string);
 #endif
 }
 
@@ -2469,6 +2557,13 @@ static bool _cw_is_falsey(cw_value_t v)
     return CW_IS_NIL(v) || (CW_IS_BOOL(v) && !CW_AS_BOOL(v)); 
 }
 
+/*
+    The beating heart of the VM.
+    Each turn through the loop reads and executes a single bytecode instruction
+    To process an instruction, first figure out the kind of the instruction. The first byte of
+    any instruction is the opcode. This code gets dispatched into a giant switch statement to
+    find the right C code that implements that instuction's semantic.
+*/
 static cw_interpret_result _cw_run(cw_virtual_machine_t* vm)
 {
     cw_call_frame_t* frame = &vm->frames[vm->frame_count -1];
