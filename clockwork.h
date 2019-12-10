@@ -281,11 +281,12 @@ typedef struct
     int upvalue_count;
 } cw_obj_closure_t;
 
-typedef cw_value_t (*cw_native_fn)(int arg_count, cw_value_t* args);
+typedef cw_value_t (*cw_native_fn)(cw_virtual_machine_t* vm, int arg_count, cw_value_t* args);
 
 typedef struct
 {
     cw_obj_t obj;
+    int arity;
     cw_native_fn function;
 } cw_obj_native_t;
 
@@ -300,7 +301,8 @@ bool cw_obj_is_type(cw_value_t value, cw_obj_type type);
 
 #define CW_AS_CLOSURE(value)    ((cw_obj_closure_t*)CW_AS_OBJ(value))
 #define CW_AS_FUNCTION(value)   ((cw_obj_function_t*)CW_AS_OBJ(value))
-#define CW_AS_NATIVE(value)     (((cw_obj_native_t*)CW_AS_OBJ(value))->function)
+#define CW_AS_NATIVE(value)     ((cw_obj_native_t*)CW_AS_OBJ(value))
+#define CW_AS_NATIVE_FUN(value) (((cw_obj_native_t*)CW_AS_OBJ(value))->function)
 #define CW_AS_STRING(value)     ((cw_obj_string_t*)CW_AS_OBJ(value))
 #define CW_AS_CSTRING(value)    (((cw_obj_string_t*)CW_AS_OBJ(value))->chars)
 
@@ -309,7 +311,7 @@ cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars,
 
 cw_obj_upvalue_t*   cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot);
 cw_obj_function_t*  cw_function_new(cw_virtual_machine_t* vm);
-cw_obj_native_t*    cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function);
+cw_obj_native_t*    cw_native_new(cw_virtual_machine_t* vm, int arity, cw_native_fn function);
 cw_obj_closure_t*   cw_closure_new(cw_virtual_machine_t* vm, cw_obj_function_t* function);
 
 void cw_obj_free(cw_virtual_machine_t* vm, cw_obj_t* object);
@@ -656,9 +658,10 @@ cw_obj_function_t* cw_function_new(cw_virtual_machine_t* vm)
     return function; 
 }
 
-cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, cw_native_fn function)
+cw_obj_native_t* cw_native_new(cw_virtual_machine_t* vm, int arity, cw_native_fn function)
 {
     cw_obj_native_t* native = CW_ALLOCATE_OBJ(vm, cw_obj_native_t, CW_OBJ_NATIVE);
+    native->arity = arity;
     native->function = function;
     return native;
 }
@@ -1140,6 +1143,7 @@ static void _cw_scanner_skip_whitespace()
                 while (_cw_scanner_peek() != '\n' && !_cw_scanner_last()) _cw_scanner_advance();
             else
                 return;
+            break;
         default: return;
         }
     }
@@ -2266,21 +2270,53 @@ static void _cw_runtime_error(cw_virtual_machine_t* vm, const char* format, ...)
 // -----------------------------------------------------------------------------
 // naitve
 
-static void _cw_define_native(cw_virtual_machine_t* vm, const char* name, cw_native_fn function)
+static void _cw_define_native(cw_virtual_machine_t* vm, const char* name, int arity, cw_native_fn function)
 {
     cw_push(vm, CW_OBJ_VAL(cw_obj_string_copy(vm, name, (int)strlen(name))));
-    cw_push(vm, CW_OBJ_VAL(cw_native_new(vm, function)));
+    cw_push(vm, CW_OBJ_VAL(cw_native_new(vm, arity, function)));
     cw_table_set(vm, &vm->globals, CW_AS_STRING(vm->stack[0]), vm->stack[1]);
     cw_pop(vm);
     cw_pop(vm);
 }
 
+#ifndef CW_DISABLE_NATIVES
+
 #include <time.h>
 
-static cw_value_t _cw_native_fun_clock(int argCount, cw_value_t* args) 
+static cw_value_t _cw_native_fun_clock(cw_virtual_machine_t* vm, int arg_count, cw_value_t* args) 
 {
     return CW_NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
+
+static cw_value_t _cw_native_fun_string(cw_virtual_machine_t* vm, int arg_count, cw_value_t* args)
+{
+    switch (args[0].type)
+    {
+    case CW_VAL_BOOL:
+    {
+        bool bool_value = CW_AS_BOOL(args[0]);
+        char* str = bool_value ? "true" : "false";
+        return CW_OBJ_VAL(cw_obj_string_copy(vm, str, (int)strlen(str)));
+    }
+    case CW_VAL_NUMBER:
+    {
+        int number = CW_AS_NUMBER(args[0]);
+        char str[12];
+        sprintf(str, "%d", number);
+        return CW_OBJ_VAL(cw_obj_string_copy(vm, str, (int)strlen(str)));
+    }
+    case CW_VAL_NIL:
+    {
+        char* str = "nil";
+        return CW_OBJ_VAL(cw_obj_string_copy(vm, str, (int)strlen(str)));
+    }
+    default:
+        _cw_runtime_error(vm, "Couldn't convert value to string");
+        return CW_NIL_VAL;
+    }
+}
+
+#endif
 
 void cw_init(cw_virtual_machine_t* vm)
 {
@@ -2298,8 +2334,11 @@ void cw_init(cw_virtual_machine_t* vm)
     cw_table_init(&vm->globals);
     cw_table_init(&vm->strings);
 
+#ifndef CW_DISABLE_NATIVES
     // natives
-    _cw_define_native(vm, "clock", _cw_native_fun_clock);
+    _cw_define_native(vm, "clock", 0, _cw_native_fun_clock);
+    _cw_define_native(vm, "string", 1, _cw_native_fun_string);
+#endif
 }
 
 void cw_free(cw_virtual_machine_t* vm)
@@ -2358,16 +2397,21 @@ static bool _cw_call_value(cw_virtual_machine_t* vm, cw_value_t callee, int arg_
         case CW_OBJ_CLOSURE: return _cw_call_closure(vm, CW_AS_CLOSURE(callee), arg_count);
         case CW_OBJ_NATIVE:
         {
-            cw_native_fn native = CW_AS_NATIVE(callee);
-            cw_value_t result = native(arg_count, vm->stack_top - arg_count);
+            cw_obj_native_t* native = CW_AS_NATIVE(callee);
+
+            if (arg_count != native->arity)
+            {
+                _cw_runtime_error(vm, "Expected %d arguments but got %d.", native->arity, arg_count);
+                return false;
+            }
+
+            cw_value_t result = native->function(vm, arg_count, vm->stack_top - arg_count);
             vm->stack_top -= arg_count + 1;
             cw_push(vm, result);
             return true;
         }
         default: break;// Non-callable object type.
         }
-
-        printf("%d: ", callee.type);
     }
 
     _cw_runtime_error(vm, "Can only call functions.");
@@ -2857,7 +2901,7 @@ static void _cw_gc_sweep(cw_virtual_machine_t* vm)
             else
                 vm->objects = object;
 
-        cw_obj_free(vm, unreached);
+            cw_obj_free(vm, unreached);
         }
     }
 }
