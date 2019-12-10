@@ -108,10 +108,9 @@ extern "C"
 // -----------------------------------------------------------------------------
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>  
+#include <string.h>
 
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
 #include <stdarg.h>
@@ -163,6 +162,13 @@ typedef struct
 #define CW_NUMBER_VAL(value)    ((cw_value_t) { CW_VAL_NUMBER,  { .number = value }})
 #define CW_OBJ_VAL(value)       ((cw_value_t) { CW_VAL_OBJ,     { .obj = (cw_obj_t*)value }})
 
+
+bool cw_values_equal(cw_value_t a, cw_value_t b);
+
+/*
+    Dynamic array of values
+
+*/
 typedef struct
 {
     int capacity;
@@ -171,10 +177,8 @@ typedef struct
 } cw_value_array_t;
 
 void cw_value_array_init(cw_value_array_t* array);
-void cw_value_array_free(cw_virtual_machine_t* vm,cw_value_array_t* array);
-void cw_value_array_write(cw_virtual_machine_t* vm,cw_value_array_t* array, cw_value_t value);
-
-bool cw_values_equal(cw_value_t a, cw_value_t b);
+void cw_value_array_free(cw_virtual_machine_t* vm, cw_value_array_t* array);
+void cw_value_array_write(cw_virtual_machine_t* vm, cw_value_array_t* array, cw_value_t value);
 
 // -----------------------------------------------------------------------------
 // ----| Chunk |----------------------------------------------------------------
@@ -223,10 +227,10 @@ typedef struct
 } cw_chunk_t;
 
 void cw_chunk_init(cw_chunk_t* chunk);
-void cw_chunk_free(cw_virtual_machine_t* vm,cw_chunk_t* chunk);
-void cw_chunk_write(cw_virtual_machine_t* vm,cw_chunk_t* chunk, uint8_t byte, int line);
+void cw_chunk_free(cw_virtual_machine_t* vm, cw_chunk_t* chunk);
+void cw_chunk_write(cw_virtual_machine_t* vm, cw_chunk_t* chunk, uint8_t byte, int line);
 
-int cw_chunk_add_constant(cw_virtual_machine_t* vm,cw_chunk_t* chunk, cw_value_t value);
+int cw_chunk_add_constant(cw_virtual_machine_t* vm, cw_chunk_t* chunk, cw_value_t value);
 
 // -----------------------------------------------------------------------------
 // ----| Object |---------------------------------------------------------------
@@ -334,11 +338,11 @@ typedef struct
 } cw_table_t;
 
 void cw_table_init(cw_table_t* table);
-void cw_table_free(cw_virtual_machine_t* vm,cw_table_t* table);
+void cw_table_free(cw_virtual_machine_t* vm, cw_table_t* table);
 
-void cw_table_copy(cw_virtual_machine_t* vm,cw_table_t* from, cw_table_t* to);
+void cw_table_copy(cw_virtual_machine_t* vm, cw_table_t* from, cw_table_t* to);
 
-bool cw_table_set(cw_virtual_machine_t* vm,cw_table_t* table, cw_obj_string_t* key, cw_value_t value);
+bool cw_table_set(cw_virtual_machine_t* vm, cw_table_t* table, cw_obj_string_t* key, cw_value_t value);
 bool cw_table_get(cw_table_t* table, cw_obj_string_t* key, cw_value_t* value);
 bool cw_table_delete(cw_table_t* table, cw_obj_string_t* key);
 
@@ -403,9 +407,9 @@ typedef struct
   int line;
 } cw_scanner_t;
 
-void cw_scanner_init(const char* src);
+void cw_scanner_init(cw_scanner_t* scanner, const char* src);
 
-cw_token_t cw_token_scan();
+cw_token_t cw_token_scan(cw_scanner_t* scanner);
 
 // -----------------------------------------------------------------------------
 // ----| compiler |-------------------------------------------------------------
@@ -417,6 +421,8 @@ typedef struct
     cw_token_t previous;
     bool had_error;
     bool panic_mode;
+
+    cw_scanner_t scanner;
 } cw_parser_t;
 
 cw_obj_function_t* cw_compile(cw_virtual_machine_t* vm, const char* src);
@@ -1072,75 +1078,73 @@ void cw_disassemble_chunk(cw_chunk_t* chunk, const char* name)
 // ----| scanner |--------------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-cw_scanner_t scanner;
-
-void cw_scanner_init(const char* src)
+void cw_scanner_init(cw_scanner_t* scanner, const char* src)
 {
-    scanner.start = src;
-    scanner.current = src;
-    scanner.line = 1;
+    scanner->start = src;
+    scanner->current = src;
+    scanner->line = 1;
 }
 
-static bool _cw_scanner_last()
+static bool _cw_scanner_last(cw_scanner_t* scanner)
 {
-    return *scanner.current == '\0';
+    return *scanner->current == '\0';
 }
 
-static char _cw_scanner_advance()
+static char _cw_scanner_advance(cw_scanner_t* scanner)
 {
-    scanner.current++;
-    return scanner.current[-1];
+    scanner->current++;
+    return scanner->current[-1];
 }
 
 // returns the current character, but doesn’t consume it
-static char _cw_scanner_peek()
+static char _cw_scanner_peek(cw_scanner_t* scanner)
 {
-    return *scanner.current;
+    return *scanner->current;
 }
 
 // like peek() but for one character past the current one
-static char _cw_scanner_peek_next()
+static char _cw_scanner_peek_next(cw_scanner_t* scanner)
 {
-    if (_cw_scanner_last()) return '\0';
-    return scanner.current[1]; 
+    if (_cw_scanner_last(scanner)) return '\0';
+    return scanner->current[1]; 
 }
 
-static bool _cw_scanner_match(char expected)
+static bool _cw_scanner_match(cw_scanner_t* scanner, char expected)
 {
-    if (_cw_scanner_last()) return false;
-    if (*scanner.current != expected) return false;
+    if (_cw_scanner_last(scanner)) return false;
+    if (*scanner->current != expected) return false;
 
-    scanner.current++;
+    scanner->current++;
     return true;
 }
 
-static cw_token_type _cw_scanner_check_keyword(int start, int length, const char* rest, cw_token_type type)
+static cw_token_type _cw_scanner_check_keyword(cw_scanner_t* scanner, int start, int length, const char* rest, cw_token_type type)
 {
-    if (scanner.current - scanner.start == start + length && memcmp(scanner.start + start, rest, length) == 0)
+    if (scanner->current - scanner->start == start + length && memcmp(scanner->start + start, rest, length) == 0)
         return type;
 
     return CW_TOKEN_IDENTIFIER;
 }
 
-static void _cw_scanner_skip_whitespace()
+static void _cw_scanner_skip_whitespace(cw_scanner_t* scanner)
 {
     while(true)
     {
-        char c = _cw_scanner_peek();
+        char c = _cw_scanner_peek(scanner);
         switch (c)
         {
         case ' ':
         case '\r':
         case '\t':
-            _cw_scanner_advance();
+            _cw_scanner_advance(scanner);
             break;
         case '\n':
-            scanner.line++;
-            _cw_scanner_advance();
+            scanner->line++;
+            _cw_scanner_advance(scanner);
             break;
         case '/':
-            if (_cw_scanner_peek_next() == '/')
-                while (_cw_scanner_peek() != '\n' && !_cw_scanner_last()) _cw_scanner_advance();
+            if (_cw_scanner_peek_next(scanner) == '/')
+                while (_cw_scanner_peek(scanner) != '\n' && !_cw_scanner_last(scanner)) _cw_scanner_advance(scanner);
             else
                 return;
             break;
@@ -1149,29 +1153,29 @@ static void _cw_scanner_skip_whitespace()
     }
 }
 
-static cw_token_type _cw_scanner_identifier_type()
+static cw_token_type _cw_scanner_identifier_type(cw_scanner_t* scanner)
 {
-    switch (scanner.start[0])
+    switch (scanner->start[0])
     {
-    case 'a': return _cw_scanner_check_keyword(1, 2, "nd", CW_TOKEN_AND);
-    case 'e': return _cw_scanner_check_keyword(1, 3, "lse", CW_TOKEN_ELSE);
+    case 'a': return _cw_scanner_check_keyword(scanner, 1, 2, "nd", CW_TOKEN_AND);
+    case 'e': return _cw_scanner_check_keyword(scanner, 1, 3, "lse", CW_TOKEN_ELSE);
     case 'f':
-        if (scanner.current - scanner.start > 1) 
-            switch (scanner.start[1])
+        if (scanner->current - scanner->start > 1) 
+            switch (scanner->start[1])
             {
-            case 'a': return _cw_scanner_check_keyword(2, 3, "lse", CW_TOKEN_FALSE);
-            case 'o': return _cw_scanner_check_keyword(2, 1, "r", CW_TOKEN_FOR);
-            case 'u': return _cw_scanner_check_keyword(2, 1, "n", CW_TOKEN_FUN);
+            case 'a': return _cw_scanner_check_keyword(scanner, 2, 3, "lse", CW_TOKEN_FALSE);
+            case 'o': return _cw_scanner_check_keyword(scanner, 2, 1, "r", CW_TOKEN_FOR);
+            case 'u': return _cw_scanner_check_keyword(scanner, 2, 1, "n", CW_TOKEN_FUN);
             }
         break;
-    case 'i': return _cw_scanner_check_keyword(1, 1, "f", CW_TOKEN_IF);
-    case 'n': return _cw_scanner_check_keyword(1, 2, "il", CW_TOKEN_NIL);
-    case 'o': return _cw_scanner_check_keyword(1, 1, "r", CW_TOKEN_OR);
-    case 'p': return _cw_scanner_check_keyword(1, 4, "rint", CW_TOKEN_PRINT);
-    case 'r': return _cw_scanner_check_keyword(1, 5, "eturn", CW_TOKEN_RETURN);
-    case 't': return _cw_scanner_check_keyword(1, 3, "rue", CW_TOKEN_TRUE);
-    case 'v': return _cw_scanner_check_keyword(1, 2, "ar", CW_TOKEN_VAR);
-    case 'w': return _cw_scanner_check_keyword(1, 4, "hile", CW_TOKEN_WHILE);
+    case 'i': return _cw_scanner_check_keyword(scanner, 1, 1, "f", CW_TOKEN_IF);
+    case 'n': return _cw_scanner_check_keyword(scanner, 1, 2, "il", CW_TOKEN_NIL);
+    case 'o': return _cw_scanner_check_keyword(scanner, 1, 1, "r", CW_TOKEN_OR);
+    case 'p': return _cw_scanner_check_keyword(scanner, 1, 4, "rint", CW_TOKEN_PRINT);
+    case 'r': return _cw_scanner_check_keyword(scanner, 1, 5, "eturn", CW_TOKEN_RETURN);
+    case 't': return _cw_scanner_check_keyword(scanner, 1, 3, "rue", CW_TOKEN_TRUE);
+    case 'v': return _cw_scanner_check_keyword(scanner, 1, 2, "ar", CW_TOKEN_VAR);
+    case 'w': return _cw_scanner_check_keyword(scanner, 1, 4, "hile", CW_TOKEN_WHILE);
     }
 
     return CW_TOKEN_IDENTIFIER;
@@ -1181,100 +1185,102 @@ static bool _cw_is_digit(char c) { return c >= '0' && c <= '9'; }
 static bool _cw_is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 
 // token creation
-static cw_token_t _cw_token_make(cw_token_type type)
+static cw_token_t _cw_token_make(cw_scanner_t* scanner, cw_token_type type)
 {
     cw_token_t token;
     token.type = type;
-    token.start = scanner.start;
-    token.length = (int)(scanner.current - scanner.start);
-    token.line = scanner.line;
+    token.start = scanner->start;
+    token.length = (int)(scanner->current - scanner->start);
+    token.line = scanner->line;
 
     return token;
 }
 
 // creates a error token with an error message
-static cw_token_t _cw_token_make_error(const char* message)
+static cw_token_t _cw_token_make_error(cw_scanner_t* scanner, const char* message)
 {
     cw_token_t token;
     token.type = CW_TOKEN_ERROR;
     token.start = message;
     token.length = (int)strlen(message);
-    token.line = scanner.line;
+    token.line = scanner->line;
 
     return token;
 }
 
-static cw_token_t _cw_token_make_string()
+static cw_token_t _cw_token_make_string(cw_scanner_t* scanner)
 {
-    while (_cw_scanner_peek() != '"' && !_cw_scanner_last())
+    while (_cw_scanner_peek(scanner) != '"' && !_cw_scanner_last(scanner))
     {
-        if (_cw_scanner_peek() == '\n') scanner.line++;
-        _cw_scanner_advance();
+        if (_cw_scanner_peek(scanner) == '\n') scanner->line++;
+        _cw_scanner_advance(scanner);
     }
 
-    if (_cw_scanner_last()) return _cw_token_make_error("Unterminated string.");
+    if (_cw_scanner_last(scanner)) return _cw_token_make_error(scanner, "Unterminated string.");
 
     // The closing quote.
-    _cw_scanner_advance();
-    return _cw_token_make(CW_TOKEN_STRING); 
+    _cw_scanner_advance(scanner);
+    return _cw_token_make(scanner, CW_TOKEN_STRING); 
 }
 
-static cw_token_t _cw_token_make_number()
+static cw_token_t _cw_token_make_number(cw_scanner_t* scanner)
 {
-    while (_cw_is_digit(_cw_scanner_peek())) _cw_scanner_advance();
+    while (_cw_is_digit(_cw_scanner_peek(scanner))) 
+        _cw_scanner_advance(scanner);
 
     // Look for a fractional part.
-    if (_cw_scanner_peek() == '.' && _cw_is_digit(_cw_scanner_peek_next()))
+    if (_cw_scanner_peek(scanner) == '.' && _cw_is_digit(_cw_scanner_peek_next(scanner)))
     {
-        _cw_scanner_advance(); // Consume the ".".
-        while (_cw_is_digit(_cw_scanner_peek())) _cw_scanner_advance();
+        _cw_scanner_advance(scanner); // Consume the ".".
+        while (_cw_is_digit(_cw_scanner_peek(scanner))) _cw_scanner_advance(scanner);
     }
 
-    return _cw_token_make(CW_TOKEN_NUMBER);
+    return _cw_token_make(scanner, CW_TOKEN_NUMBER);
 }
 
-static cw_token_t _cw_token_make_identifier()
+static cw_token_t _cw_token_make_identifier(cw_scanner_t* scanner)
 {
-    while (_cw_is_alpha(_cw_scanner_peek()) || _cw_is_digit(_cw_scanner_peek())) _cw_scanner_advance();
-    return _cw_token_make(_cw_scanner_identifier_type());
+    while (_cw_is_alpha(_cw_scanner_peek(scanner)) || _cw_is_digit(_cw_scanner_peek(scanner))) 
+        _cw_scanner_advance(scanner);
+    return _cw_token_make(scanner, _cw_scanner_identifier_type(scanner));
 }
 
-cw_token_t cw_token_scan()
+cw_token_t cw_token_scan(cw_scanner_t* scanner)
 {
-    _cw_scanner_skip_whitespace();
-    scanner.start = scanner.current;
-    if (_cw_scanner_last()) return _cw_token_make(CW_TOKEN_EOF);
+    _cw_scanner_skip_whitespace(scanner);
+    scanner->start = scanner->current;
+    if (_cw_scanner_last(scanner)) return _cw_token_make(scanner, CW_TOKEN_EOF);
 
-    char c = _cw_scanner_advance();
+    char c = _cw_scanner_advance(scanner);
 
     // identifiers and keywords
-    if (_cw_is_alpha(c)) return _cw_token_make_identifier();
-    if (_cw_is_digit(c)) return _cw_token_make_number();
+    if (_cw_is_alpha(c)) return _cw_token_make_identifier(scanner);
+    if (_cw_is_digit(c)) return _cw_token_make_number(scanner);
 
     switch (c)
     {
     // single character tokens
-    case '(': return _cw_token_make(CW_TOKEN_LEFT_PAREN);
-    case ')': return _cw_token_make(CW_TOKEN_RIGHT_PAREN);
-    case '{': return _cw_token_make(CW_TOKEN_LEFT_BRACE);
-    case '}': return _cw_token_make(CW_TOKEN_RIGHT_BRACE);
-    case ';': return _cw_token_make(CW_TOKEN_SEMICOLON);
-    case ',': return _cw_token_make(CW_TOKEN_COMMA);
-    case '.': return _cw_token_make(CW_TOKEN_DOT);
-    case '-': return _cw_token_make(CW_TOKEN_MINUS);
-    case '+': return _cw_token_make(CW_TOKEN_PLUS);
-    case '/': return _cw_token_make(CW_TOKEN_SLASH);
-    case '*': return _cw_token_make(CW_TOKEN_STAR);
+    case '(': return _cw_token_make(scanner, CW_TOKEN_LEFT_PAREN);
+    case ')': return _cw_token_make(scanner, CW_TOKEN_RIGHT_PAREN);
+    case '{': return _cw_token_make(scanner, CW_TOKEN_LEFT_BRACE);
+    case '}': return _cw_token_make(scanner, CW_TOKEN_RIGHT_BRACE);
+    case ';': return _cw_token_make(scanner, CW_TOKEN_SEMICOLON);
+    case ',': return _cw_token_make(scanner, CW_TOKEN_COMMA);
+    case '.': return _cw_token_make(scanner, CW_TOKEN_DOT);
+    case '-': return _cw_token_make(scanner, CW_TOKEN_MINUS);
+    case '+': return _cw_token_make(scanner, CW_TOKEN_PLUS);
+    case '/': return _cw_token_make(scanner, CW_TOKEN_SLASH);
+    case '*': return _cw_token_make(scanner, CW_TOKEN_STAR);
     // two-character punctuation tokens
-    case '!': return _cw_token_make(_cw_scanner_match('=') ? CW_TOKEN_BANG_EQUAL : CW_TOKEN_BANG);
-    case '=': return _cw_token_make(_cw_scanner_match('=') ? CW_TOKEN_EQUAL_EQUAL : CW_TOKEN_EQUAL);
-    case '<': return _cw_token_make(_cw_scanner_match('=') ? CW_TOKEN_LESS_EQUAL : CW_TOKEN_LESS);
-    case '>': return _cw_token_make(_cw_scanner_match('=') ? CW_TOKEN_GREATER_EQUAL : CW_TOKEN_GREATER);
+    case '!': return _cw_token_make(scanner, _cw_scanner_match(scanner, '=') ? CW_TOKEN_BANG_EQUAL : CW_TOKEN_BANG);
+    case '=': return _cw_token_make(scanner, _cw_scanner_match(scanner, '=') ? CW_TOKEN_EQUAL_EQUAL : CW_TOKEN_EQUAL);
+    case '<': return _cw_token_make(scanner, _cw_scanner_match(scanner, '=') ? CW_TOKEN_LESS_EQUAL : CW_TOKEN_LESS);
+    case '>': return _cw_token_make(scanner, _cw_scanner_match(scanner, '=') ? CW_TOKEN_GREATER_EQUAL : CW_TOKEN_GREATER);
     // literal tokens
-    case '"': return _cw_token_make_string();
+    case '"': return _cw_token_make_string(scanner);
     }
 
-    return _cw_token_make_error("Unexpected character.");
+    return _cw_token_make_error(scanner, "Unexpected character.");
 }
 
 // -----------------------------------------------------------------------------
@@ -1446,7 +1452,7 @@ static void _cw_parser_advance(cw_parser_t* parser)
 
     while (true)
     {
-        parser->current = cw_token_scan();
+        parser->current = cw_token_scan(&parser->scanner);
         if (parser->current.type != CW_TOKEN_ERROR) break;
 
         _cw_parser_error_at_current(parser, parser->current.start);
@@ -1861,7 +1867,6 @@ cw_parse_rule_t _cw_parse_rules[] =
     { _cw_string,   NULL,       CW_PREC_NONE },         // TOKEN_STRING
     { _cw_number,   NULL,       CW_PREC_NONE },         // TOKEN_NUMBER
     { NULL,         _cw_and,    CW_PREC_AND },          // TOKEN_AND
-    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_CLASS
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_ELSE
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_FALSE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FOR
@@ -1871,7 +1876,6 @@ cw_parse_rule_t _cw_parse_rules[] =
     { NULL,         _cw_or,     CW_PREC_OR },           // TOKEN_OR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_PRINT
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_RETURN
-    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_SUPER
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_THIS
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_TRUE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_VAR
@@ -2161,11 +2165,11 @@ static cw_obj_function_t* _cw_compiler_end(cw_virtual_machine_t* vm, cw_parser_t
 
 cw_obj_function_t* cw_compile(cw_virtual_machine_t* vm, const char* src)
 {
-    cw_scanner_init(src);
-
     cw_parser_t parser;
     parser.had_error = false;
     parser.panic_mode = false;
+
+    cw_scanner_init(&parser.scanner, src);
 
     cw_compiler_t compiler;
     _cw_compiler_init(vm, &parser, &compiler, CW_TYPE_SCRIPT);
