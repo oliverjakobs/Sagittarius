@@ -379,10 +379,10 @@ typedef enum
     // Literals.
     CW_TOKEN_IDENTIFIER, CW_TOKEN_STRING, CW_TOKEN_NUMBER,
     // Keywords.
-    CW_TOKEN_AND, CW_TOKEN_CLASS, CW_TOKEN_ELSE, CW_TOKEN_FALSE,
-    CW_TOKEN_FOR, CW_TOKEN_FUN, CW_TOKEN_IF, CW_TOKEN_NIL, CW_TOKEN_OR,
-    CW_TOKEN_PRINT, CW_TOKEN_RETURN, CW_TOKEN_SUPER, CW_TOKEN_THIS,
-    CW_TOKEN_TRUE, CW_TOKEN_VAR, CW_TOKEN_WHILE,
+    CW_TOKEN_AND, CW_TOKEN_ELSE, CW_TOKEN_FALSE, CW_TOKEN_FOR, 
+    CW_TOKEN_FUN, CW_TOKEN_IF, CW_TOKEN_NIL, CW_TOKEN_OR,
+    CW_TOKEN_PRINT, CW_TOKEN_RETURN, CW_TOKEN_TRUE, 
+    CW_TOKEN_VAR, CW_TOKEN_WHILE,
     // Specials.
     CW_TOKEN_ERROR,
     CW_TOKEN_EOF
@@ -1154,7 +1154,6 @@ static cw_token_type _cw_scanner_identifier_type()
     switch (scanner.start[0])
     {
     case 'a': return _cw_scanner_check_keyword(1, 2, "nd", CW_TOKEN_AND);
-    case 'c': return _cw_scanner_check_keyword(1, 4, "lass", CW_TOKEN_CLASS);
     case 'e': return _cw_scanner_check_keyword(1, 3, "lse", CW_TOKEN_ELSE);
     case 'f':
         if (scanner.current - scanner.start > 1) 
@@ -1170,15 +1169,7 @@ static cw_token_type _cw_scanner_identifier_type()
     case 'o': return _cw_scanner_check_keyword(1, 1, "r", CW_TOKEN_OR);
     case 'p': return _cw_scanner_check_keyword(1, 4, "rint", CW_TOKEN_PRINT);
     case 'r': return _cw_scanner_check_keyword(1, 5, "eturn", CW_TOKEN_RETURN);
-    case 's': return _cw_scanner_check_keyword(1, 4, "uper", CW_TOKEN_SUPER);
-    case 't':
-        if (scanner.current - scanner.start > 1)
-            switch (scanner.start[1])
-            {
-            case 'h': return _cw_scanner_check_keyword(2, 2, "is", CW_TOKEN_THIS);
-            case 'r': return _cw_scanner_check_keyword(2, 2, "ue", CW_TOKEN_TRUE);
-            }
-        break; 
+    case 't': return _cw_scanner_check_keyword(1, 3, "rue", CW_TOKEN_TRUE);
     case 'v': return _cw_scanner_check_keyword(1, 2, "ar", CW_TOKEN_VAR);
     case 'w': return _cw_scanner_check_keyword(1, 4, "hile", CW_TOKEN_WHILE);
     }
@@ -1495,7 +1486,6 @@ static void _cw_parser_synchronize(cw_parser_t* parser)
 
         switch (parser->current.type)
         {
-        case CW_TOKEN_CLASS:
         case CW_TOKEN_FUN:
         case CW_TOKEN_VAR:
         case CW_TOKEN_FOR:
