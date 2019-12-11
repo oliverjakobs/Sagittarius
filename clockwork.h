@@ -172,7 +172,6 @@ typedef struct
 #define CW_NUMBER_VAL(value)    ((cw_value_t) { CW_VAL_NUMBER,  { .number = value }})
 #define CW_OBJ_VAL(value)       ((cw_value_t) { CW_VAL_OBJ,     { .obj = (cw_obj_t*)value }})
 
-
 bool cw_values_equal(cw_value_t a, cw_value_t b);
 
 /*
@@ -410,7 +409,8 @@ typedef enum
     CW_TOKEN_LEFT_PAREN, CW_TOKEN_RIGHT_PAREN,
     CW_TOKEN_LEFT_BRACE, CW_TOKEN_RIGHT_BRACE,
     CW_TOKEN_COMMA, CW_TOKEN_DOT, CW_TOKEN_MINUS, CW_TOKEN_PLUS,
-    CW_TOKEN_SEMICOLON, CW_TOKEN_SLASH, CW_TOKEN_STAR,
+    CW_TOKEN_COLON, CW_TOKEN_SEMICOLON, 
+    CW_TOKEN_SLASH, CW_TOKEN_STAR,
     // One or two character tokens.
     CW_TOKEN_BANG, CW_TOKEN_BANG_EQUAL,
     CW_TOKEN_EQUAL, CW_TOKEN_EQUAL_EQUAL,
@@ -419,9 +419,9 @@ typedef enum
     // Literals.
     CW_TOKEN_IDENTIFIER, CW_TOKEN_STRING, CW_TOKEN_NUMBER,
     // Keywords.
-    CW_TOKEN_AND, CW_TOKEN_ELSE, CW_TOKEN_FALSE, CW_TOKEN_FOR, 
-    CW_TOKEN_FUN, CW_TOKEN_IF, CW_TOKEN_NIL, CW_TOKEN_OR,
-    CW_TOKEN_PRINT, CW_TOKEN_RETURN, CW_TOKEN_TRUE, 
+    CW_TOKEN_AND, CW_TOKEN_ELSE, CW_TOKEN_END, CW_TOKEN_FALSE, 
+    CW_TOKEN_FOR, CW_TOKEN_FUN, CW_TOKEN_IF, CW_TOKEN_NIL,
+    CW_TOKEN_OR, CW_TOKEN_PRINT, CW_TOKEN_RETURN, CW_TOKEN_TRUE, 
     CW_TOKEN_VAR, CW_TOKEN_WHILE,
     // Specials.
     CW_TOKEN_ERROR,
@@ -1240,7 +1240,14 @@ static cw_token_type _cw_scanner_identifier_type(cw_scanner_t* scanner)
     switch (scanner->start[0])
     {
     case 'a': return _cw_scanner_check_keyword(scanner, 1, 2, "nd", CW_TOKEN_AND);
-    case 'e': return _cw_scanner_check_keyword(scanner, 1, 3, "lse", CW_TOKEN_ELSE);
+    case 'e': 
+        if (scanner->current - scanner->start > 1)
+            switch (scanner->start[1])
+            {
+                case 'l': return _cw_scanner_check_keyword(scanner, 2, 2, "se", CW_TOKEN_ELSE);
+                case 'n': return _cw_scanner_check_keyword(scanner, 2, 1, "d", CW_TOKEN_END);
+            }
+        break;
     case 'f':
         if (scanner->current - scanner->start > 1) 
             switch (scanner->start[1])
@@ -1346,6 +1353,7 @@ cw_token_t cw_token_scan(cw_scanner_t* scanner)
     case ')': return _cw_token_make(scanner, CW_TOKEN_RIGHT_PAREN);
     case '{': return _cw_token_make(scanner, CW_TOKEN_LEFT_BRACE);
     case '}': return _cw_token_make(scanner, CW_TOKEN_RIGHT_BRACE);
+    case ':': return _cw_token_make(scanner, CW_TOKEN_COLON);
     case ';': return _cw_token_make(scanner, CW_TOKEN_SEMICOLON);
     case ',': return _cw_token_make(scanner, CW_TOKEN_COMMA);
     case '.': return _cw_token_make(scanner, CW_TOKEN_DOT);
@@ -1934,6 +1942,7 @@ cw_parse_rule_t _cw_parse_rules[] =
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_DOT
     { _cw_unary,    _cw_binary, CW_PREC_TERM },         // TOKEN_MINUS
     { NULL,         _cw_binary, CW_PREC_TERM },         // TOKEN_PLUS
+    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_COLON
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_SEMICOLON
     { NULL,         _cw_binary, CW_PREC_FACTOR },       // TOKEN_SLASH
     { NULL,         _cw_binary, CW_PREC_FACTOR },       // TOKEN_STAR
@@ -1950,6 +1959,7 @@ cw_parse_rule_t _cw_parse_rules[] =
     { _cw_number,   NULL,       CW_PREC_NONE },         // TOKEN_NUMBER
     { NULL,         _cw_and,    CW_PREC_AND },          // TOKEN_AND
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_ELSE
+    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_END
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_FALSE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FOR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FUN
@@ -1958,7 +1968,6 @@ cw_parse_rule_t _cw_parse_rules[] =
     { NULL,         _cw_or,     CW_PREC_OR },           // TOKEN_OR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_PRINT
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_RETURN
-    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_THIS
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_TRUE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_VAR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_WHILE
@@ -2169,7 +2178,6 @@ static void _cw_block(cw_virtual_machine_t* vm, cw_parser_t* parser)
     {
         _cw_declaration(vm, parser);
     }
-
     _cw_parser_consume(parser, CW_TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
