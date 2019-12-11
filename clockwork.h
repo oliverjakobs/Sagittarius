@@ -419,7 +419,7 @@ typedef enum
     // Literals.
     CW_TOKEN_IDENTIFIER, CW_TOKEN_STRING, CW_TOKEN_NUMBER,
     // Keywords.
-    CW_TOKEN_AND, CW_TOKEN_ELSE, CW_TOKEN_END, CW_TOKEN_FALSE, 
+    CW_TOKEN_AND, CW_TOKEN_ELSE, CW_TOKEN_FALSE, 
     CW_TOKEN_FOR, CW_TOKEN_FUN, CW_TOKEN_IF, CW_TOKEN_NIL,
     CW_TOKEN_OR, CW_TOKEN_PRINT, CW_TOKEN_RETURN, CW_TOKEN_TRUE, 
     CW_TOKEN_VAR, CW_TOKEN_WHILE,
@@ -1240,14 +1240,7 @@ static cw_token_type _cw_scanner_identifier_type(cw_scanner_t* scanner)
     switch (scanner->start[0])
     {
     case 'a': return _cw_scanner_check_keyword(scanner, 1, 2, "nd", CW_TOKEN_AND);
-    case 'e': 
-        if (scanner->current - scanner->start > 1)
-            switch (scanner->start[1])
-            {
-                case 'l': return _cw_scanner_check_keyword(scanner, 2, 2, "se", CW_TOKEN_ELSE);
-                case 'n': return _cw_scanner_check_keyword(scanner, 2, 1, "d", CW_TOKEN_END);
-            }
-        break;
+    case 'e': return _cw_scanner_check_keyword(scanner, 1, 3, "lse", CW_TOKEN_ELSE);
     case 'f':
         if (scanner->current - scanner->start > 1) 
             switch (scanner->start[1])
@@ -1959,7 +1952,6 @@ cw_parse_rule_t _cw_parse_rules[] =
     { _cw_number,   NULL,       CW_PREC_NONE },         // TOKEN_NUMBER
     { NULL,         _cw_and,    CW_PREC_AND },          // TOKEN_AND
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_ELSE
-    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_END
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_FALSE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FOR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FUN
