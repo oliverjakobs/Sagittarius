@@ -344,6 +344,9 @@ bool cw_obj_is_type(cw_value_t value, cw_obj_type type);
 cw_obj_string_t* cw_obj_string_move(cw_virtual_machine_t* vm, char* chars, int length);
 cw_obj_string_t* cw_obj_string_copy(cw_virtual_machine_t* vm, const char* chars, int length);
 
+/*
+    creating objects
+*/
 cw_obj_upvalue_t*   cw_upvalue_new(cw_virtual_machine_t* vm, cw_value_t* slot);
 cw_obj_function_t*  cw_function_new(cw_virtual_machine_t* vm);
 cw_obj_native_t*    cw_native_new(cw_virtual_machine_t* vm, int arity, cw_native_fn function);
@@ -659,6 +662,9 @@ uint32_t _cw_obj_string_hash(const char* key, int length)
 
 #define CW_ALLOCATE_OBJ(vm, type, object_type) (type*)_cw__obj_allocate(vm, sizeof(type), object_type)
 
+/*
+    allocate a new object
+*/
 static cw_obj_t* _cw__obj_allocate(cw_virtual_machine_t* vm, size_t size, cw_obj_type type)
 {
     cw_obj_t* object = (cw_obj_t*)cw_memory_reallocate(vm, NULL, 0, size);
@@ -674,6 +680,9 @@ static cw_obj_t* _cw__obj_allocate(cw_virtual_machine_t* vm, size_t size, cw_obj
     return object;
 }
 
+/*
+    allocate a new string object
+*/
 static cw_obj_string_t* _cw_obj_allocate_string(cw_virtual_machine_t* vm, char* chars, int length, uint32_t hash)
 {
     cw_obj_string_t* string = CW_ALLOCATE_OBJ(vm, cw_obj_string_t, CW_OBJ_STRING);
@@ -965,6 +974,9 @@ void cw_chunk_init(cw_chunk_t* chunk)
     cw_value_array_init(&chunk->constants);
 }
 
+/*
+    free a chunk's memory
+*/
 void cw_chunk_free(cw_virtual_machine_t* vm, cw_chunk_t* chunk)
 {
     CW_FREE_ARRAY(vm, uint8_t, chunk->code, chunk->capacity);
@@ -1160,30 +1172,43 @@ void cw_scanner_init(cw_scanner_t* scanner, const char* src)
     scanner->line = 1;
 }
 
+/*
+    check if the current character is a null byte
+*/
 static bool _cw_scanner_last(cw_scanner_t* scanner)
 {
     return *scanner->current == '\0';
 }
 
+/*
+    consume the current character and return it
+*/
 static char _cw_scanner_advance(cw_scanner_t* scanner)
 {
     scanner->current++;
     return scanner->current[-1];
 }
 
-// returns the current character, but doesn’t consume it
+/*
+    returns the current character, but doesn’t consume it
+*/
 static char _cw_scanner_peek(cw_scanner_t* scanner)
 {
     return *scanner->current;
 }
 
-// like peek() but for one character past the current one
+/*
+    like peek() but for one character past the current one
+*/
 static char _cw_scanner_peek_next(cw_scanner_t* scanner)
 {
     if (_cw_scanner_last(scanner)) return '\0';
     return scanner->current[1]; 
 }
 
+/*
+    if the current character is the expected one, advance and return true. Else return false
+*/
 static bool _cw_scanner_match(cw_scanner_t* scanner, char expected)
 {
     if (_cw_scanner_last(scanner)) return false;
@@ -1191,14 +1216,6 @@ static bool _cw_scanner_match(cw_scanner_t* scanner, char expected)
 
     scanner->current++;
     return true;
-}
-
-static cw_token_type _cw_scanner_check_keyword(cw_scanner_t* scanner, int start, int length, const char* rest, cw_token_type type)
-{
-    if (scanner->current - scanner->start == start + length && memcmp(scanner->start + start, rest, length) == 0)
-        return type;
-
-    return CW_TOKEN_IDENTIFIER;
 }
 
 /*
@@ -1230,6 +1247,17 @@ static void _cw_scanner_skip_whitespace(cw_scanner_t* scanner)
         default: return;
         }
     }
+}
+
+/*
+    Check the rest of a potential keyword’s lexeme
+*/
+static cw_token_type _cw_scanner_check_keyword(cw_scanner_t* scanner, int s, int l, const char* r, cw_token_type type)
+{
+    if (scanner->current - scanner->start == s + l && memcmp(scanner->start + s, r, l) == 0)
+        return type;
+
+    return CW_TOKEN_IDENTIFIER;
 }
 
 /*
@@ -1266,7 +1294,10 @@ static cw_token_type _cw_scanner_identifier_type(cw_scanner_t* scanner)
 static bool _cw_is_digit(char c) { return c >= '0' && c <= '9'; }
 static bool _cw_is_alpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 
-// token creation
+/*
+    Token creation
+    Use the scanner's start and current pointers to capture the token's lexeme
+*/
 static cw_token_t _cw_token_make(cw_scanner_t* scanner, cw_token_type type)
 {
     cw_token_t token;
@@ -1278,7 +1309,9 @@ static cw_token_t _cw_token_make(cw_scanner_t* scanner, cw_token_type type)
     return token;
 }
 
-// creates a error token with an error message
+/*
+    Create an error token with an error message
+*/
 static cw_token_t _cw_token_make_error(cw_scanner_t* scanner, const char* message)
 {
     cw_token_t token;
@@ -1290,6 +1323,10 @@ static cw_token_t _cw_token_make_error(cw_scanner_t* scanner, const char* messag
     return token;
 }
 
+/*
+    Create a string token
+    Consume characters until the scanner reach the closing quote (including newlines to support multi-line strings)
+*/
 static cw_token_t _cw_token_make_string(cw_scanner_t* scanner)
 {
     while (_cw_scanner_peek(scanner) != '"' && !_cw_scanner_last(scanner))
@@ -1305,6 +1342,9 @@ static cw_token_t _cw_token_make_string(cw_scanner_t* scanner)
     return _cw_token_make(scanner, CW_TOKEN_STRING); 
 }
 
+/*
+    Creates a number token
+*/
 static cw_token_t _cw_token_make_number(cw_scanner_t* scanner)
 {
     while (_cw_is_digit(_cw_scanner_peek(scanner))) 
@@ -1320,6 +1360,9 @@ static cw_token_t _cw_token_make_number(cw_scanner_t* scanner)
     return _cw_token_make(scanner, CW_TOKEN_NUMBER);
 }
 
+/*
+    Create a indentifier token
+*/
 static cw_token_t _cw_token_make_identifier(cw_scanner_t* scanner)
 {
     while (_cw_is_alpha(_cw_scanner_peek(scanner)) || _cw_is_digit(_cw_scanner_peek(scanner))) 
@@ -1367,11 +1410,15 @@ cw_token_t cw_token_scan(cw_scanner_t* scanner)
 }
 
 // -----------------------------------------------------------------------------
-// ----| compiler |-------------------------------------------------------------
+// ----| parser error |---------------------------------------------------------
 // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-// parser error
+/*
+    if the parser is in panic mode ignore else set it in panic mode
+    
+    print where the error occured and try to show a human-readable lexeme
+    then print the error message and set the parser's had_error flag
+*/
 static void _cw_parser_error_at(cw_parser_t* parser, cw_token_t* token, const char* message)
 {
     if (parser->panic_mode) return;
@@ -1379,35 +1426,34 @@ static void _cw_parser_error_at(cw_parser_t* parser, cw_token_t* token, const ch
 
     fprintf(stderr, "[line %d] Error", token->line);
 
-    if (token->type == CW_TOKEN_EOF) 
-    {
+    if (token->type == CW_TOKEN_EOF)
         fprintf(stderr, " at end");
-    }
-    else if (token->type == CW_TOKEN_ERROR)
-    {
-        // Nothing.
-    }
-    else
-    {
+    else if (token->type != CW_TOKEN_ERROR)
         fprintf(stderr, " at '%.*s'", token->length, token->start);
-    }
 
     fprintf(stderr, ": %s\n", message);
     parser->had_error = true;
 }
 
+/*
+    report an error at the location of the current token
+*/
 static void _cw_parser_error_at_current(cw_parser_t* parser, const char* message)
 {
     _cw_parser_error_at(parser, &parser->current, message);
 }
 
+/*
+    report an error at the location of the token the parser just consumed
+*/
 static void _cw_parser_error(cw_parser_t* parser, const char* message)
 {
     _cw_parser_error_at(parser, &parser->previous, message);
 }
 
 // -----------------------------------------------------------------------------
-// compiler
+// ----| compiler |-------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 typedef enum
 {
@@ -1529,6 +1575,14 @@ static int _cw_upvalue_resolve(cw_compiler_t* compiler, cw_parser_t* parser, cw_
 
 // -----------------------------------------------------------------------------
 // parser
+
+/*
+    Step forward through the token stream.
+    Take the old current token and stash it in another field.
+    Ask the scanner for the next token and stores it for later use.
+    Keep reading tokens and reporting the errors, until the parser hit a non-error 
+    one or reach the end.
+*/
 static void _cw_parser_advance(cw_parser_t* parser)
 {
     parser->previous = parser->current;
@@ -1542,6 +1596,10 @@ static void _cw_parser_advance(cw_parser_t* parser)
     }
 }
 
+/*
+    Read the next token and validate that the token has an expected type.
+    If not, report an error
+*/
 static void _cw_parser_consume(cw_parser_t* parser, cw_token_type type, const char* message)
 {
     if (parser->current.type == type)
@@ -1593,6 +1651,9 @@ static void _cw_parser_synchronize(cw_parser_t* parser)
 // -----------------------------------------------------------------------------
 // parser constant
 
+/*
+    insert an entry to the current chunks constant table
+*/
 static uint8_t _cw_parser_make_constant(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_value_t value)
 {
     int constant = cw_chunk_add_constant(vm, _cw_current_chunk(vm->current_compiler), value);
@@ -1611,6 +1672,10 @@ static uint8_t _cw_parser_make_constant_indentifier(cw_virtual_machine_t* vm, cw
 
 // -----------------------------------------------------------------------------
 // parser emit
+
+/*
+    after parsing a piece of source code the parser translates that to a series of bytecode instructions
+*/
 static void _cw_parser_emit_byte(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t byte)
 {
     cw_chunk_write(vm, _cw_current_chunk(vm->current_compiler), byte, parser->previous.line);
@@ -1622,13 +1687,18 @@ static void _cw_parser_emit_return(cw_virtual_machine_t* vm, cw_parser_t* parser
     _cw_parser_emit_byte(vm, parser, CW_OP_RETURN);
 }
 
-// convenience function to write an opcode followed by a one-byte operand
+/*
+    convenience function to write an opcode followed by a one-byte operand
+*/
 static void _cw_parser_emit_bytes(cw_virtual_machine_t* vm, cw_parser_t* parser, uint8_t byte1, uint8_t byte2)
 {
     _cw_parser_emit_byte(vm, parser, byte1);
     _cw_parser_emit_byte(vm, parser, byte2);
 }
 
+/*
+    wrapper to add a value to the constant table and emit an CW_OP_CONSTANT instruction
+*/
 static void _cw_parser_emit_constant(cw_virtual_machine_t* vm, cw_parser_t* parser, cw_value_t value)
 {
     _cw_parser_emit_bytes(vm, parser, CW_OP_CONSTANT, _cw_parser_make_constant(vm, parser, value));
@@ -1767,6 +1837,9 @@ static void _cw_parse_precedence(cw_virtual_machine_t* vm, cw_parser_t* parser, 
         _cw_parser_error(parser, "Invalid assignment target.");
 }
 
+/*
+    parse the lowest precedence level, which subsumes all of the higher precedence expressions too
+*/
 static void _cw_expression(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     _cw_parse_precedence(vm, parser, CW_PREC_ASSIGNMENT);
@@ -1900,7 +1973,7 @@ static void _cw_or(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assig
     _cw_patch_jump(vm, parser, end_jump);
 }
 
-static uint8_t argument_list(cw_virtual_machine_t* vm, cw_parser_t* parser)
+static uint8_t _cw_argument_list(cw_virtual_machine_t* vm, cw_parser_t* parser)
 {
     uint8_t arg_count = 0;
     if (!_cw_parser_check(parser, CW_TOKEN_RIGHT_PAREN))
@@ -1921,7 +1994,7 @@ static uint8_t argument_list(cw_virtual_machine_t* vm, cw_parser_t* parser)
 
 static void _cw_call(cw_virtual_machine_t* vm, cw_parser_t* parser, bool can_assign)
 {
-    uint8_t arg_count = argument_list(vm, parser);
+    uint8_t arg_count = _cw_argument_list(vm, parser);
     _cw_parser_emit_bytes(vm, parser, CW_OP_CALL, arg_count);
 }
 
@@ -1951,7 +2024,7 @@ cw_parse_rule_t _cw_parse_rules[] =
     { _cw_string,   NULL,       CW_PREC_NONE },         // TOKEN_STRING
     { _cw_number,   NULL,       CW_PREC_NONE },         // TOKEN_NUMBER
     { NULL,         _cw_and,    CW_PREC_AND },          // TOKEN_AND
-    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_ELSE
+    { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_ELSE 
     { _cw_literal,  NULL,       CW_PREC_NONE },         // TOKEN_FALSE
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FOR
     { NULL,         NULL,       CW_PREC_NONE },         // TOKEN_FUN
