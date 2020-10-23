@@ -1,5 +1,8 @@
 #Directories
 .vscode/
+.vs/
+bin-int/
 
 #files
 *.exe
+*.user
