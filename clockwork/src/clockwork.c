@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <assert.h>
+#include <ctype.h>
 
 #include "tb_stretchy.h"
 
@@ -12,19 +13,14 @@ void buf_test()
 	int* buffer = NULL;
 	enum { N = 512 };
 	for (int i = 0; i < N; ++i)
-	{
-		int test = i;
-		stretchy_push(buffer, ++test);
-	}
+		tb_stretchy_push(buffer, i);
 
-	assert(stretchy_size(buffer) == N);
+	assert(tb_stretchy_size(buffer) == N);
 
-	for (int i = 0; i < stretchy_size(buffer); ++i)
-	{
-		printf("[%d]: %d\n", i, buffer[i]);
-	}
+	for (int i = 0; i < tb_stretchy_size(buffer); ++i)
+		assert(i == buffer[i]);
 
-	stretchy_free(buffer);
+	tb_stretchy_free(buffer);
 }
 
 typedef enum
@@ -38,7 +34,7 @@ typedef struct
 	TokenType type;
 	union
 	{
-		uint64_t u64;
+		uint64_t val;
 	};
 } Token;
 
@@ -68,7 +64,7 @@ void next_token()
 			stream++;
 		}
 		token.type = TOKEN_INT;
-		token.u64 = val;
+		token.val = val;
 		break;
 	}
 	default:

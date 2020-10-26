@@ -10,12 +10,6 @@
       <Platform>x64</Platform>
     </ProjectConfiguration>
   </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="src\clockwork.c" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="src\tb_stretchy.h" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{348144F9-A0EB-F86F-E929-AA1555D3D6C4}</ProjectGuid>
     <IgnoreWarnCompileDuplicatedFilename>true</IgnoreWarnCompileDuplicatedFilename>
@@ -94,6 +88,12 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\tb_stretchy.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\clockwork.c" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
