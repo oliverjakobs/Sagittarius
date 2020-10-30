@@ -12,12 +12,10 @@
 #define tb_stretchy__need_space(b, n) ((b) == NULL || tb_stretchy__len(b) + (n) >= tb_stretchy__cap(b))
 #define tb_stretchy__make_space(b, n) (tb_stretchy__need_space(b, (n)) ? tb_stretchy__grow(b, n) : 0)
 
-#define tb_stretchy__push_checked(b, v) ((b) ? (b)[tb_stretchy__len(b)++] = (v) : 0)
-
-#define tb_stretchy_push(b, v) (tb_stretchy__make_space(b, 1), tb_stretchy__push_checked(b, v))
+#define tb_stretchy_push(b, v) (tb_stretchy__make_space(b, 1), (b)[tb_stretchy__len(b)++] = (v))
 #define tb_stretchy_size(b) ((b) ? tb_stretchy__len(b) : 0)
-#define tb_stretchy_free(b) ((b) ? free(tb_stretchy__hdr(b)), 0 : 0);
-#define tb_stretchy_last(b) ((b)[tb_stretchy__len(b) - 1])
+#define tb_stretchy_free(b) ((b) ? (free(tb_stretchy__hdr(b)), (b) = NULL) : 0);
+#define tb_stretchy_last(b) ((b) ? (b) + tb_stretchy__len(b) : NULL)
 
 static void* tb_stretchy__realloc(const void* buf, size_t new_len, size_t elem_size)
 {
