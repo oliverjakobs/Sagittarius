@@ -102,6 +102,7 @@ typedef enum
 	TOKEN_LAST_CHAR = 127,
 	TOKEN_INT,
 	TOKEN_FLOAT,
+	TOKEN_STR,
 	TOKEN_NAME
 } TokenType;
 
@@ -124,6 +125,7 @@ typedef struct
 	{
 		uint64_t ival;
 		double fval;
+		const char* strval;
 		const char* name;
 	};
 } Token;
@@ -251,14 +253,93 @@ void scan_int()
 	token.ival = val;
 }
 
+char escape_to_char[] = {
+	['n'] = '\n',
+	['r'] = '\r',
+	['t'] = '\t',
+	['v'] = '\v',
+	['b'] = '\b',
+	['a'] = '\a',
+	['0'] = 0
+};
+
 void scan_char()
 {
-	assert(0);
+	assert(*stream == '\'');
+	stream++;
+
+	char val = 0;
+	if (*stream == '\'')
+	{
+		syntax_error("Char literal cannot be empty.");
+		stream++;
+	}
+	else if (*stream == '\n')
+	{
+		syntax_error("Char literal cannot contain newline.");
+	}
+	else if (*stream == '\\')
+	{
+		stream++;
+		val = escape_to_char[*stream];
+		if (val == 0 && *stream != '0')
+			syntax_error("Invalid char literal escape '\\%c'.", *stream);
+
+		stream++;
+	}
+	else
+	{
+		val = *stream;
+		stream++;
+	}
+
+	if (*stream != '\'')
+		syntax_error("Expected closing char quote, got '%c'.", *stream);
+	else
+		stream++;
+
+	token.type = TOKEN_INT;
+	token.mod = TOKENMOD_CHAR;
+	token.ival = val;
 }
 
 void scan_str()
 {
-	assert(0);
+	assert(*stream == '"');
+	stream++;
+
+	char* str = NULL;
+	while (*stream && *stream != '"')
+	{
+		char val = *stream;
+		if (val == '\n')
+		{
+			syntax_error("Char literal cannot contain newline.");
+		}
+		else if (val == '\\')
+		{
+			stream++;
+			val = escape_to_char[*stream];
+			if (val == 0 && *stream != '0')
+				syntax_error("Invalid char literal escape '\\%c'.", *stream);
+		}
+		tb_stretchy_push(str, val);
+		stream++;
+	}
+
+	if (*stream)
+	{
+		assert(*stream == '"');
+		stream++;
+	}
+	else
+	{
+		syntax_error("Unexpected end of file within string literal");
+	}
+
+	tb_stretchy_push(str, '\0');
+	token.type = TOKEN_STR;
+	token.strval = str;
 }
 
 void next_token()
@@ -371,6 +452,7 @@ inline bool expect_token(TokenType type)
 #define assert_token_name(x) assert(token.name == str_intern(x) && match_token(TOKEN_NAME))
 #define assert_token_int(x) assert(token.ival == (x) && match_token(TOKEN_INT))
 #define assert_token_float(x) assert(token.fval == (x) && match_token(TOKEN_FLOAT))
+#define assert_token_str(x) assert(strcmp(token.strval, (x)) == 0 && match_token(TOKEN_STR))
 #define assert_token_eof() assert(match_token('\0'))
 
 void lex_test()
@@ -388,6 +470,17 @@ void lex_test()
 	assert_token_float(.123);
 	assert_token_float(42.);
 	assert_token_float(3e10);
+	assert_token_eof();
+
+	/* Char literal tests */
+	init_stream("'a' '\\n'");
+	assert_token_int('a');
+	assert_token_int('\n');
+	assert_token_eof();
+
+	/* String literal tests */
+	init_stream("\"foo\"");
+	assert_token_str("foo");
 	assert_token_eof();
 
 	init_stream("XY+(XY)_HELLO1,234+Foo_34!994");
@@ -510,11 +603,13 @@ void parse_test()
 void run_tests()
 {
 	buf_test();
+	/*
 	str_intern_test();
 
 	lex_test();
 
 	parse_test();
+	*/
 
 }
 
