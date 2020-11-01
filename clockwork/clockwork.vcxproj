@@ -89,10 +89,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="src\str_intern.h" />
     <ClInclude Include="src\tb_stretchy.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\clockwork.c" />
+    <ClCompile Include="src\str_intern.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

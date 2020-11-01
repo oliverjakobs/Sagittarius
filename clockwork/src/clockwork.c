@@ -11,6 +11,7 @@
 #include <ctype.h>
 
 #include "tb_stretchy.h"
+#include "str_intern.h"
 
 
 void fatal(const char* fmt, ...)
@@ -32,35 +33,6 @@ void syntax_error(const char* fmt, ...)
 	vprintf(fmt, args);
 	printf("\n");
 	va_end(args);
-}
-
-typedef struct
-{
-	size_t len;
-	const char* str;
-} InternStr;
-
-static InternStr* intern_table;
-
-const char* str_intern_range(const char* start, const char* end)
-{
-	size_t len = end - start;
-	for (InternStr* it = intern_table; it != tb_stretchy_last(intern_table); ++it)
-	{
-		if (it->len == len && strncmp(it->str, start, len) == 0)
-			return it->str;
-	}
-
-	char* str = malloc(len + 1);
-	memcpy(str, start, len);
-	str[len] = '\0';
-	tb_stretchy_push(intern_table, ((InternStr){ len, str }));
-	return str;
-}
-
-const char* str_intern(const char* str)
-{
-	return str_intern_range(str, str + strlen(str));
 }
 
 void str_intern_test()
@@ -211,19 +183,22 @@ void scan_int()
 	if (*stream == '0')
 	{
 		stream++;
-		if (isdigit(*stream))
+		if (tolower(*stream) == 'x')
+		{
+			base = 16;
+			token.mod = TOKENMOD_HEX;
+			stream++;
+		}
+		else if (tolower(*stream) == 'b')
+		{
+			base = 2;
+			token.mod = TOKENMOD_BIN;
+			stream++;
+		}
+		else if (isdigit(*stream))
 		{
 			base = 8;
-		}
-		else
-		{
-			if (tolower(*stream) == 'x')
-				base = 16;
-			else if (tolower(*stream) == 'b')
-				base = 2;
-			else
-				syntax_error("Invalid integer literal suffix '%c'", *stream);
-			stream++;
+			token.mod = TOKENMOD_OCT;
 		}
 	}
 	uint64_t val = 0;
@@ -458,7 +433,8 @@ inline bool expect_token(TokenType type)
 void lex_test()
 {
 	/* Integer literal tests */
-	init_stream("0xffffffffffffffff 042 0b1111");
+	init_stream("0 0xffffffffffffffff 042 0b1111");
+	assert_token_int(0);
 	assert_token_int(0xffffffffffffffffull);
 	assert_token_int(042);
 	assert_token_int(0xF);
@@ -603,13 +579,12 @@ void parse_test()
 void run_tests()
 {
 	buf_test();
-	/*
+
 	str_intern_test();
 
 	lex_test();
 
 	parse_test();
-	*/
 
 }
 
