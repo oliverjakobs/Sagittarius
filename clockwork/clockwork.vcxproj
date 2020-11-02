@@ -91,10 +91,12 @@
   <ItemGroup>
     <ClInclude Include="src\str_intern.h" />
     <ClInclude Include="src\tb_stretchy.h" />
+    <ClInclude Include="src\token.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\clockwork.c" />
     <ClCompile Include="src\str_intern.c" />
+    <ClCompile Include="src\token.c" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
