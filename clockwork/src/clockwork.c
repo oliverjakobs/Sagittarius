@@ -1,18 +1,6 @@
-#include <stdio.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <stdarg.h>
-#include <string.h>
 
-#include <math.h>
-#include <assert.h>
-#include <ctype.h>
-
-#include "tb_stretchy.h"
-#include "str_intern.h"
 #include "token.h"
+#include "ast.h"
 
 
 void fatal(const char* fmt, ...)
@@ -575,6 +563,21 @@ void parse_test()
 
 #undef assert_expr
 
+void expr_test()
+{
+    Expr* exprs[] = {
+        expr_binary('+', expr_int(1), expr_int(2)),
+        expr_unary('-', expr_float(3.14)),
+        expr_ternary(expr_name("flag"), expr_str("true"), expr_str("false")),
+    };
+    
+    for (Expr** it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs); it++)
+    {
+        print_expr(*it);
+        printf("\n");
+    }
+}
+
 void run_tests()
 {
     buf_test();
@@ -584,6 +587,8 @@ void run_tests()
     lex_test();
 
     parse_test();
+
+    expr_test();
 
 }
 

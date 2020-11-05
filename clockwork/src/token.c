@@ -28,7 +28,6 @@ const char* token_type_str(TokenType type)
 	return buf;
 }
 
-
 void print_token(Token token)
 {
 	switch (token.type)
