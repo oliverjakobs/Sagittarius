@@ -1,4 +1,4 @@
-#include "print.h"
+#include "ast/print.h"
 
 void fatal(const char* fmt, ...)
 {
@@ -52,7 +52,6 @@ void buf_test()
     assert(buffer == NULL);
     assert(tb_stretchy_size(buffer) == 0);
 }
-
 
 Token token;
 const char* stream;
@@ -399,7 +398,7 @@ inline bool expect_token(TokenType type)
 #define assert_token_int(x) assert(token.ival == (x) && match_token(TOKEN_INT))
 #define assert_token_float(x) assert(token.fval == (x) && match_token(TOKEN_FLOAT))
 #define assert_token_str(x) assert(strcmp(token.strval, (x)) == 0 && match_token(TOKEN_STR))
-#define assert_token_eof() assert(match_token('\0'))
+#define assert_token_eof() assert(match_token(TOKEN_EOF))
 
 void lex_test()
 {
@@ -569,12 +568,88 @@ void expr_test()
         expr_field(expr_name("person"), "name"),
         expr_call(expr_name("fact"), (Expr*[]){ expr_int(42) }, 1),
         expr_index(expr_field(expr_name("person"), "siblings"), expr_int(3)),
-        expr_cast(typespec_pointer(typespec_name("int")), expr_name("void_ptr"))
+        expr_cast(typespec_pointer(typespec_name("int")), expr_name("void_ptr")),
+        expr_compound(typespec_name("Vector"), (Expr*[]) { expr_int(1), expr_int(2) }, 2)
     };
     
     for (Expr** it = exprs; it != exprs + sizeof(exprs) / sizeof(*exprs); it++)
     {
         print_expr(*it);
+        printf("\n");
+    }
+}
+
+void stmt_test()
+{
+    Stmt* stmts[] = {
+        stmt_return(expr_int(42)),
+        stmt_break(),
+        stmt_continue(),
+        stmt_block(
+            (StmtBlock) {
+                (Stmt*[]) {
+                    stmt_break(),
+                    stmt_continue()
+                }, 2,
+            }
+        ),
+        stmt_expr(expr_call(expr_name("print"), (Expr*[]) { expr_int(1), expr_int(2) }, 2)),
+        stmt_auto("x", expr_int(42)),
+        stmt_if(
+            expr_name("flag1"),
+            (StmtBlock) {
+                (Stmt*[]) {
+                    stmt_return(expr_int(1))
+                }, 1,
+            },
+            (ElseIf[]) {
+                expr_name("flag2"),
+                (StmtBlock) {
+                    (Stmt*[]) {
+                        stmt_return(expr_int(2))
+                    }, 1,
+                }
+            }, 1,
+            (StmtBlock) {
+                (Stmt*[]) {
+                    stmt_return(expr_int(3))
+                }, 1,
+            }
+        ),
+        stmt_while(
+            expr_name("running"),
+            (StmtBlock) {
+                (Stmt*[]) {
+                    stmt_assign(TOKEN_ADD_ASSIGN, expr_name("i"), expr_int(16)),
+                }, 1,
+            }
+        ),
+        stmt_switch(
+            expr_name("val"),
+            (SwitchCase[]) { 
+                {
+                    (Expr*[]) { expr_int(3), expr_int(4) }, 2, false,
+                    (StmtBlock) {
+                        (Stmt*[]) {
+                            stmt_return(expr_name("val"))
+                        }, 1,
+                    },
+                },
+                {
+                    (Expr*[]){ expr_int(1) }, 1, true,
+                    (StmtBlock) {
+                        (Stmt*[]) {
+                            stmt_return(expr_int(0))
+                        }, 1,
+                    },
+                },
+            }, 2
+        ),
+    };
+
+    for (Stmt** it = stmts; it != stmts + sizeof(stmts) / sizeof(*stmts); it++)
+    {
+        print_stmt(*it);
         printf("\n");
     }
 }
@@ -589,7 +664,8 @@ void run_tests()
 
     parse_test();
 
-    expr_test();
+    expr_test(); 
+    stmt_test();
 }
 
 int main(int argc, char** argv)

@@ -89,17 +89,24 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\ast.h" />
+    <ClInclude Include="src\ast\ast_common.h" />
+    <ClInclude Include="src\ast\decl.h" />
+    <ClInclude Include="src\ast\expr.h" />
+    <ClInclude Include="src\ast\stmt.h" />
+    <ClInclude Include="src\ast\typespec.h" />
     <ClInclude Include="src\common.h" />
-    <ClInclude Include="src\print.h" />
+    <ClInclude Include="src\ast\print.h" />
     <ClInclude Include="src\str_intern.h" />
     <ClInclude Include="src\tb_stretchy.h" />
     <ClInclude Include="src\token.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\ast.c" />
+    <ClCompile Include="src\ast\decl.c" />
+    <ClCompile Include="src\ast\expr.c" />
+    <ClCompile Include="src\ast\stmt.c" />
+    <ClCompile Include="src\ast\typespec.c" />
     <ClCompile Include="src\clockwork.c" />
-    <ClCompile Include="src\print.c" />
+    <ClCompile Include="src\ast\print.c" />
     <ClCompile Include="src\str_intern.c" />
     <ClCompile Include="src\token.c" />
   </ItemGroup>
