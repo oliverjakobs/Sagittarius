@@ -33,7 +33,6 @@ const char* token_type_names[] = {
     [TOKEN_MOD_ASSIGN] = "%=",
 };
 
-
 const char* token_type_name(TokenType type)
 {
     return token_type_names[type];
@@ -41,16 +40,21 @@ const char* token_type_name(TokenType type)
 
 size_t copy_token_type_str(char* dest, size_t dest_size, TokenType type)
 {
-    if (type < sizeof(token_type_names) / sizeof(*token_type_names) && token_type_names[type])
-        return snprintf(dest, dest_size, "%s", token_type_names[type]);
-    
-    if (type < 128 && isprint(type))
-        return snprintf(dest, dest_size, "%c", type);
-    
-    return snprintf(dest, dest_size, "<ASCII %d>", type);
+    size_t n = 0;
+    const char* name = token_type_name(type);
+    if (name) {
+        n = snprintf(dest, dest_size, "%s", name);
+    }
+    else if (type < 128 && isprint(type)) {
+        n = snprintf(dest, dest_size, "%c", type);
+    }
+    else {
+        n = snprintf(dest, dest_size, "<ASCII %d>", type);
+    }
+    return n;
 }
 
-const char* token_type_str(TokenType type)
+const char* temp_token_type_str(TokenType type)
 {
     static char buf[256];
     size_t n = copy_token_type_str(buf, sizeof(buf), type);

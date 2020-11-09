@@ -8,6 +8,7 @@ typedef enum
     TOKEN_EOF = 0,
     /* Reserve first 128 values for single character tokens */
     TOKEN_LAST_CHAR = 127,
+    TOKEN_KEYWORD,
     TOKEN_INT,
     TOKEN_FLOAT,
     TOKEN_STR,
@@ -24,6 +25,7 @@ typedef enum
     TOKEN_DEC,
     TOKEN_COLON_ASSIGN,
     TOKEN_ADD_ASSIGN,
+    TOKEN_FIRST_ASSIGN = TOKEN_ADD_ASSIGN,
     TOKEN_SUB_ASSIGN,
     TOKEN_OR_ASSIGN,
     TOKEN_AND_ASSIGN,
@@ -33,6 +35,7 @@ typedef enum
     TOKEN_MUL_ASSIGN,
     TOKEN_DIV_ASSIGN,
     TOKEN_MOD_ASSIGN,
+    TOKEN_LAST_ASSIGN = TOKEN_MOD_ASSIGN,
 } TokenType;
 
 typedef enum
@@ -62,7 +65,7 @@ typedef struct
 const char* token_type_name(TokenType type);
 
 size_t copy_token_type_str(char* dest, size_t dest_size, TokenType type);
-const char* token_type_str(TokenType type);
+const char* temp_token_type_str(TokenType type);
 
 void print_token(Token token);
 

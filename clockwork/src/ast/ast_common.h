@@ -16,35 +16,7 @@ typedef struct
 
 typedef struct Typespec Typespec;
 
-static void* ast_alloc(size_t size)
-{
-    assert(size != 0);
-    void* block = malloc(size);
-
-    if (!block)
-    {
-        perror("ast_alloc failed");
-        exit(1);
-    }
-
-    memset(block, 0, size);
-    return block;
-}
-
-static void* ast_dup(const void* src, size_t size)
-{
-    if (size == 0) return NULL;
-
-    void* block = malloc(size);
-
-    if (!block)
-    {
-        perror("ast_dup failed");
-        exit(1);
-    }
-
-    memcpy(block, src, size);
-    return block;
-}
+void* ast_alloc(size_t size);
+void* ast_dup(const void* src, size_t size);
 
 #endif // !AST_COMMON_H

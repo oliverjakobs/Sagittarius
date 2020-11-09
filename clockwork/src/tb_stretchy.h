@@ -12,10 +12,11 @@
 
 #define tb_stretchy__max(a, b) ((a) >= (b) ? (a) : (b))
 
-#define tb_stretchy_push(b, v) (tb_stretchy__grow(&(b), sizeof(*(b))) ? (b)[tb_stretchy__len(b)++] = (v), 1 : 0)
+#define tb_stretchy_push(b, v) (tb_stretchy__grow(((const void**)&(b)), sizeof(*(b))) ? (b)[tb_stretchy__len(b)++] = (v), 1 : 0)
 #define tb_stretchy_size(b) ((b) ? tb_stretchy__len(b) : 0)
 #define tb_stretchy_free(b) ((b) ? (free(tb_stretchy__hdr(b)), (b) = NULL) : 0);
 #define tb_stretchy_last(b) ((b) ? (b) + tb_stretchy__len(b) : NULL)
+#define tb_stretchy_sizeof(b) (tb_stretchy_size(b) * sizeof(*(b)))
 
 static int tb_stretchy__grow(const void** buf, size_t elem_size)
 {

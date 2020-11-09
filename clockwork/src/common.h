@@ -16,4 +16,36 @@
 #include "tb_stretchy.h"
 #include "str_intern.h"
 
+static void fatal(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    printf("FATAL: ");
+    vprintf(fmt, args);
+    printf("\n");
+    va_end(args);
+    exit(1);
+}
+
+static void syntax_error(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    printf("Syntax Error: ");
+    vprintf(fmt, args);
+    printf("\n");
+    va_end(args);
+}
+
+static void fatal_syntax_error(const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    printf("Syntax Error: ");
+    vprintf(fmt, args);
+    printf("\n");
+    va_end(args);
+    exit(1);
+}
+
 #endif /* !COMMON_H */

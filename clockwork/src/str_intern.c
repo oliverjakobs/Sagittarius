@@ -8,6 +8,7 @@ typedef struct
 	const char* str;
 } InternStr;
 
+static Arena str_arena;
 static InternStr* intern_table;
 
 const char* str_intern_range(const char* start, const char* end)
@@ -19,7 +20,7 @@ const char* str_intern_range(const char* start, const char* end)
 			return it->str;
 	}
 
-	char* str = malloc(len + 1);
+	char* str = arena_alloc(&str_arena, len + 1);
 	memcpy(str, start, len);
 	str[len] = '\0';
 	tb_stretchy_push(intern_table, ((InternStr){ len, str }));
@@ -29,4 +30,9 @@ const char* str_intern_range(const char* start, const char* end)
 const char* str_intern(const char* str)
 {
 	return str_intern_range(str, str + strlen(str));
+}
+
+Arena* get_str_arena()
+{
+	return &str_arena;
 }

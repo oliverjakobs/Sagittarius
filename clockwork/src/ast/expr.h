@@ -18,7 +18,24 @@ typedef enum
     EXPR_UNARY,
     EXPR_BINARY,
     EXPR_TERNARY,
+    EXPR_SIZEOF,
 } ExprType;
+
+typedef enum 
+{
+    SIZEOF_EXPR,
+    SIZEOF_TYPE,
+} SizeofType;
+
+typedef struct 
+{
+    SizeofType type;
+    union
+    {
+        Expr* expr;
+        Typespec* typespec;
+    };
+} SizeofExpr;
 
 typedef struct
 {
@@ -89,6 +106,7 @@ struct Expr
         CallExpr call;
         IndexExpr index;
         FieldExpr field;
+        SizeofExpr sizeof_expr;
     };
 };
 
@@ -104,5 +122,7 @@ Expr* expr_compound(Typespec* type, Expr** args, size_t num_args);
 Expr* expr_unary(TokenType op, Expr* expr);
 Expr* expr_binary(TokenType op, Expr* left, Expr* right);
 Expr* expr_ternary(Expr* cond, Expr* then_expr, Expr* else_expr);
+Expr* expr_sizeof_expr(Expr* expr);
+Expr* expr_sizeof_type(Typespec* type);
 
 #endif // !AST_EXPR_H

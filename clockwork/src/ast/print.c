@@ -106,12 +106,12 @@ void print_expr(Expr* expr)
         printf(")");
         break;
     case EXPR_UNARY:
-        printf("(%c ", expr->unary.op);
+        printf("(%s ", temp_token_type_str(expr->unary.op));
         print_expr(expr->unary.expr);
         printf(")");
         break;
     case EXPR_BINARY:
-        printf("(%c ", expr->binary.op);
+        printf("(%s ", temp_token_type_str(expr->binary.op));
         print_expr(expr->binary.left);
         printf(" ");
         print_expr(expr->binary.right);
@@ -124,6 +124,16 @@ void print_expr(Expr* expr)
         print_expr(expr->ternary.then_expr);
         printf(" ");
         print_expr(expr->ternary.else_expr);
+        printf(")");
+        break;
+    case EXPR_SIZEOF:
+        printf("(sizeof ");
+        if (expr->sizeof_expr.type == SIZEOF_EXPR)
+            print_expr(expr->sizeof_expr.expr);
+        else if (expr->sizeof_expr.type == SIZEOF_TYPE)
+            print_typespec(expr->sizeof_expr.typespec);
+        else
+            assert(0);
         printf(")");
         break;
     default:
@@ -212,9 +222,9 @@ void print_stmt(Stmt* stmt)
         break;
     case STMT_FOR:
         printf("(for ");
-        print_stmt_block(stmt->for_stmt.init, false);
+        print_stmt(stmt->for_stmt.init);
         print_expr(stmt->for_stmt.cond);
-        print_stmt_block(stmt->for_stmt.next, false);
+        print_stmt(stmt->for_stmt.next);
         indent++;
         print_newline();
         print_stmt_block(stmt->for_stmt.block, true);
@@ -250,8 +260,11 @@ void print_stmt(Stmt* stmt)
     case STMT_ASSIGN:
         printf("(%s ", token_type_name(stmt->assign.op));
         print_expr(stmt->assign.left);
-        printf(" ");
-        print_expr(stmt->assign.right);
+        if (stmt->assign.right)
+        {
+            printf(" ");
+            print_expr(stmt->assign.right);
+        }
         printf(")");
         break;
     case STMT_AUTO:
@@ -319,14 +332,17 @@ void print_decl(Decl* decl)
         break;
     case DECL_VAR:
         printf("(var %s ", decl->name);
-        print_typespec(decl->var_decl.type);
+        if (decl->var_decl.type)
+            print_typespec(decl->var_decl.type);
+        else
+            printf("nil");
         printf(" ");
         print_expr(decl->var_decl.expr);
         printf(")");
         break;
     case DECL_CONST:
         printf("(const %s ", decl->name);
-        print_expr(decl->var_decl.expr);
+        print_expr(decl->const_decl.expr);
         printf(")");
         break;
     case DECL_TYPEDEF:
@@ -343,7 +359,10 @@ void print_decl(Decl* decl)
             print_typespec(it->type);
         }
         printf(" ) ");
-        print_typespec(decl->func_decl.ret_type);
+        if (decl->func_decl.ret_type)
+            print_typespec(decl->func_decl.ret_type);
+        else
+            printf("nil");
         indent++;
         print_newline();
         print_stmt_block(decl->func_decl.block, true);

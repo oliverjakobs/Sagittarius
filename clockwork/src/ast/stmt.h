@@ -48,9 +48,9 @@ typedef struct
 
 typedef struct
 {
-    StmtBlock init;
+    Stmt* init;
     Expr* cond;
-    StmtBlock next;
+    Stmt* next;
     StmtBlock block;
 } ForStmt;
 
@@ -106,7 +106,7 @@ Stmt* stmt_block(StmtBlock block);
 Stmt* stmt_if(Expr* cond, StmtBlock then_block, ElseIf* elseifs, size_t num_elseifs, StmtBlock else_block);
 Stmt* stmt_while(Expr* cond, StmtBlock block);
 Stmt* stmt_do_while(Expr* cond, StmtBlock block);
-Stmt* stmt_for(StmtBlock init, Expr* cond, StmtBlock next, StmtBlock block);
+Stmt* stmt_for(Stmt* init, Expr* cond, Stmt* next, StmtBlock block);
 Stmt* stmt_switch(Expr* expr, SwitchCase* cases, size_t num_cases);
 Stmt* stmt_assign(TokenType op, Expr* left, Expr* right);
 Stmt* stmt_auto(const char* name, Expr* expr);

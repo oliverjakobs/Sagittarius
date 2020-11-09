@@ -58,7 +58,7 @@ Stmt* stmt_do_while(Expr* cond, StmtBlock block)
     return stmt;
 }
 
-Stmt* stmt_for(StmtBlock init, Expr* cond, StmtBlock next, StmtBlock block)
+Stmt* stmt_for(Stmt* init, Expr* cond, Stmt* next, StmtBlock block)
 {
     Stmt* stmt = stmt_new(STMT_FOR);
     stmt->for_stmt.init = init;
