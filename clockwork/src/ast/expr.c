@@ -105,16 +105,14 @@ Expr* expr_ternary(Expr* cond, Expr* then_expr, Expr* else_expr)
 
 Expr* expr_sizeof_expr(Expr* expr)
 {
-    Expr* e = expr_new(EXPR_SIZEOF);
-    e->sizeof_expr.type = SIZEOF_EXPR;
-    e->sizeof_expr.expr = expr;
+    Expr* e = expr_new(EXPR_SIZEOF_EXPR);
+    e->sizeof_expr = expr;
     return e;
 }
 
 Expr* expr_sizeof_type(Typespec* type)
 {
-    Expr* e = expr_new(EXPR_SIZEOF);
-    e->sizeof_expr.type = SIZEOF_TYPE;
-    e->sizeof_expr.typespec = type;
-    return e;
+    Expr* expr = expr_new(EXPR_SIZEOF_TYPE);
+    expr->sizeof_type = type;
+    return expr;
 }

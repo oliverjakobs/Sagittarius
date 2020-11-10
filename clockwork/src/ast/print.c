@@ -2,9 +2,28 @@
 
 static int indent;
 
+static char* print_buf = NULL;
+static bool use_print_buf;
+
+#define PRINT(s, ...) (use_print_buf ? (void)tb_stretchy_printf(&print_buf, s, __VA_ARGS__) : (void)printf(s, __VA_ARGS__))
+
+void print_to_buf(bool b)
+{
+    use_print_buf = b;
+}
+
+void flush_print_buf(FILE* file)
+{
+    if (print_buf)
+    {
+        if (file) fputs(print_buf, file);
+        tb_stretchy_clear(print_buf);
+    }
+}
+
 static void print_newline()
 {
-    printf("\n%.*s", 2 * indent, "                                                                      ");
+    PRINT("\n%.*s", 2 * indent, "                                                                      ");
 }
 
 void print_typespec(Typespec* type)
@@ -12,33 +31,33 @@ void print_typespec(Typespec* type)
     switch (type->type)
     {
     case TYPESPEC_NAME:
-        printf("%s", type->name);
+        PRINT("%s", type->name);
         break;
     case TYPESPEC_FUNC:
     {
         FuncTypespec func = type->func;
-        printf("(func (");
+        PRINT("(func (");
         for (size_t i = 0; i < func.num_args; ++i)
         {
-            printf(" ");
+            PRINT(" ");
             print_typespec(func.args[i]);
         }
-        printf(") ");
+        PRINT(") ");
         print_typespec(func.ret);
-        printf(")");
+        PRINT(")");
         break;
     }
     case TYPESPEC_ARRAY:
-        printf("(arr ");
+        PRINT("(arr ");
         print_typespec(type->array.elem);
-        printf(" ");
+        PRINT(" ");
         print_expr(type->array.size);
-        printf(")");
+        PRINT(")");
         break;
     case TYPESPEC_POINTER:
-        printf("(ptr ");
+        PRINT("(ptr ");
         print_typespec(type->ptr.elem);
-        printf(")");
+        PRINT(")");
         break;
     default:
         assert(0);
@@ -51,90 +70,90 @@ void print_expr(Expr* expr)
     switch (expr->type)
     {
     case EXPR_INT:
-        printf("%llu", expr->ival);
+        PRINT("%llu", expr->ival);
         break;
     case EXPR_FLOAT:
-        printf("%f", expr->fval);
+        PRINT("%f", expr->fval);
         break;
     case EXPR_STR:
-        printf("\"%s\"", expr->strval);
+        PRINT("\"%s\"", expr->strval);
         break;
     case EXPR_NAME:
-        printf("%s", expr->name);
+        PRINT("%s", expr->name);
         break;
     case EXPR_CAST:
-        printf("(cast ");
+        PRINT("(cast ");
         print_typespec(expr->cast.type);
-        printf(" ");
+        PRINT(" ");
         print_expr(expr->cast.expr);
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_CALL:
-        printf("(");
+        PRINT("(");
         print_expr(expr->call.expr);
         for (size_t i = 0; i < expr->call.num_args; ++i)
         {
-            printf(" ");
+            PRINT(" ");
             print_expr(expr->call.args[i]);
         }
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_INDEX:
-        printf("(index ");
+        PRINT("(index ");
         print_expr(expr->index.expr);
-        printf(" ");
+        PRINT(" ");
         print_expr(expr->index.index);
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_FIELD:
-        printf("(field ");
+        PRINT("(field ");
         print_expr(expr->field.expr);
-        printf(" %s)", expr->field.name);
+        PRINT(" %s)", expr->field.name);
         break;
     case EXPR_COMPOUND:
-        printf("(compound ");
+        PRINT("(compound ");
         if (expr->compound.type)
             print_typespec(expr->compound.type);
         else
-            printf("nil");
+            PRINT("nil");
 
         for (size_t i = 0; i < expr->compound.num_args; ++i)
         {
-            printf(" ");
+            PRINT(" ");
             print_expr(expr->compound.args[i]);
         }
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_UNARY:
-        printf("(%s ", temp_token_type_str(expr->unary.op));
+        PRINT("(%s ", temp_token_type_str(expr->unary.op));
         print_expr(expr->unary.expr);
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_BINARY:
-        printf("(%s ", temp_token_type_str(expr->binary.op));
+        PRINT("(%s ", temp_token_type_str(expr->binary.op));
         print_expr(expr->binary.left);
-        printf(" ");
+        PRINT(" ");
         print_expr(expr->binary.right);
-        printf(")");
+        PRINT(")");
         break;
     case EXPR_TERNARY:
-        printf("(if ");
+        PRINT("(if ");
         print_expr(expr->ternary.cond);
-        printf(" ");
+        PRINT(" ");
         print_expr(expr->ternary.then_expr);
-        printf(" ");
+        PRINT(" ");
         print_expr(expr->ternary.else_expr);
-        printf(")");
+        PRINT(")");
         break;
-    case EXPR_SIZEOF:
-        printf("(sizeof ");
-        if (expr->sizeof_expr.type == SIZEOF_EXPR)
-            print_expr(expr->sizeof_expr.expr);
-        else if (expr->sizeof_expr.type == SIZEOF_TYPE)
-            print_typespec(expr->sizeof_expr.typespec);
-        else
-            assert(0);
-        printf(")");
+    case EXPR_SIZEOF_EXPR:
+        PRINT("(sizeof ");
+        print_expr(expr->sizeof_expr);
+        PRINT(")");
+        break;
+    case EXPR_SIZEOF_TYPE:
+        PRINT("(sizeof ");
+        print_typespec(expr->sizeof_type);
+        PRINT(")");
         break;
     default:
         assert(0);
@@ -145,19 +164,19 @@ void print_expr(Expr* expr)
 static void print_stmt_block(StmtBlock block, bool newlines)
 {
     assert(block.num_stmts != 0);
-    printf("(block");
+    PRINT("(block");
     indent++;
     for (Stmt** it = block.stmts; it != block.stmts + block.num_stmts; it++)
     {
         if (newlines)
             print_newline();
         else
-            printf(" ");
+            PRINT(" ");
 
         print_stmt(*it);
     }
     indent--;
-    printf(")");
+    PRINT(")");
 }
 
 void print_stmt(Stmt* stmt)
@@ -165,21 +184,21 @@ void print_stmt(Stmt* stmt)
     switch (stmt->type)
     {
     case STMT_RETURN:
-        printf("(return ");
+        PRINT("(return ");
         print_expr(stmt->return_stmt.expr);
-        printf(")");
+        PRINT(")");
         break;
     case STMT_BREAK:
-        printf("(break)");
+        PRINT("(break)");
         break;
     case STMT_CONTINUE:
-        printf("(continue)");
+        PRINT("(continue)");
         break;
     case STMT_BLOCK:
         print_stmt_block(stmt->block, true);
         break;
     case STMT_IF:
-        printf("(if ");
+        PRINT("(if ");
         print_expr(stmt->if_stmt.cond);
         indent++;
         print_newline();
@@ -187,7 +206,7 @@ void print_stmt(Stmt* stmt)
         for (ElseIf* it = stmt->if_stmt.elseifs; it != stmt->if_stmt.elseifs + stmt->if_stmt.num_elseifs; it++)
         {
             print_newline();
-            printf("elseif ");
+            PRINT("elseif ");
             print_expr(it->cond);
             print_newline();
             print_stmt_block(it->block, true);
@@ -195,33 +214,33 @@ void print_stmt(Stmt* stmt)
         if (stmt->if_stmt.else_block.num_stmts != 0)
         {
             print_newline();
-            printf("else ");
+            PRINT("else ");
             print_newline();
             print_stmt_block(stmt->if_stmt.else_block, true);
         }
-        printf(")");
+        PRINT(")");
         indent--;
         break;
     case STMT_WHILE:
-        printf("(while ");
+        PRINT("(while ");
         print_expr(stmt->while_stmt.cond);
         indent++;
         print_newline();
         print_stmt_block(stmt->while_stmt.block, true);
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     case STMT_DO_WHILE:
-        printf("(do-while ");
+        PRINT("(do-while ");
         print_expr(stmt->while_stmt.cond);
         indent++;
         print_newline();
         print_stmt_block(stmt->while_stmt.block, true);
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     case STMT_FOR:
-        printf("(for ");
+        PRINT("(for ");
         print_stmt(stmt->for_stmt.init);
         print_expr(stmt->for_stmt.cond);
         print_stmt(stmt->for_stmt.next);
@@ -231,46 +250,46 @@ void print_stmt(Stmt* stmt)
         indent--;
         break;
     case STMT_SWITCH:
-        printf("(switch ");
+        PRINT("(switch ");
         print_expr(stmt->switch_stmt.expr);
         indent++;
         for (SwitchCase* it = stmt->switch_stmt.cases; it != stmt->switch_stmt.cases + stmt->switch_stmt.num_cases; it++)
         {
             print_newline();
-            printf("(case (");
+            PRINT("(case (");
             if (it->is_default)
-                printf("default");
+                PRINT("default");
             else
-                printf("nil");
+                PRINT("nil");
 
             for (Expr** expr = it->exprs; expr != it->exprs + it->num_exprs; expr++)
             {
-                printf(" ");
+                PRINT(" ");
                 print_expr(*expr);
             }
-            printf(") ");
+            PRINT(") ");
             indent++;
             print_newline();
             print_stmt_block(it->block, true);
             indent--;
         }
-        printf(")");
+        PRINT(")");
         indent--;
         break;
     case STMT_ASSIGN:
-        printf("(%s ", token_type_name(stmt->assign.op));
+        PRINT("(%s ", token_type_name(stmt->assign.op));
         print_expr(stmt->assign.left);
         if (stmt->assign.right)
         {
-            printf(" ");
+            PRINT(" ");
             print_expr(stmt->assign.right);
         }
-        printf(")");
+        PRINT(")");
         break;
     case STMT_AUTO:
-        printf("(:= %s ", stmt->auto_stmt.name);
+        PRINT("(:= %s ", stmt->auto_stmt.name);
         print_expr(stmt->auto_stmt.expr);
-        printf(")");
+        PRINT(")");
         break;
     case STMT_EXPR:
         print_expr(stmt->expr);
@@ -286,12 +305,12 @@ static void print_aggregate_decl(Decl* decl)
     for (AggregateItem* it = decl->aggregate_decl.items; it != decl->aggregate_decl.items + decl->aggregate_decl.num_items; it++)
     {
         print_newline();
-        printf("(");
+        PRINT("(");
         print_typespec(it->type);
         for (const char** name = it->names; name != it->names + it->num_names; name++)
-            printf(" %s", *name);
+            PRINT(" %s", *name);
 
-        printf(")");
+        PRINT(")");
     }
 }
 
@@ -300,74 +319,74 @@ void print_decl(Decl* decl)
     switch (decl->type)
     {
     case DECL_ENUM:
-        printf("(enum %s", decl->name);
+        PRINT("(enum %s", decl->name);
         indent++;
         for (EnumItem* it = decl->enum_decl.items; it != decl->enum_decl.items + decl->enum_decl.num_items; it++)
         {
             print_newline();
-            printf("(%s ", it->name);
+            PRINT("(%s ", it->name);
             if (it->expr)
                 print_expr(it->expr);
             else
-                printf("nil");
+                PRINT("nil");
 
-            printf(")");
+            PRINT(")");
         }
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     case DECL_STRUCT:
-        printf("(struct %s", decl->name);
+        PRINT("(struct %s", decl->name);
         indent++;
         print_aggregate_decl(decl);
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     case DECL_UNION:
-        printf("(union %s", decl->name);
+        PRINT("(union %s", decl->name);
         indent++;
         print_aggregate_decl(decl);
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     case DECL_VAR:
-        printf("(var %s ", decl->name);
+        PRINT("(var %s ", decl->name);
         if (decl->var_decl.type)
             print_typespec(decl->var_decl.type);
         else
-            printf("nil");
-        printf(" ");
+            PRINT("nil");
+        PRINT(" ");
         print_expr(decl->var_decl.expr);
-        printf(")");
+        PRINT(")");
         break;
     case DECL_CONST:
-        printf("(const %s ", decl->name);
+        PRINT("(const %s ", decl->name);
         print_expr(decl->const_decl.expr);
-        printf(")");
+        PRINT(")");
         break;
     case DECL_TYPEDEF:
-        printf("(typedef %s ", decl->name);
+        PRINT("(typedef %s ", decl->name);
         print_typespec(decl->typedef_decl.type);
-        printf(")");
+        PRINT(")");
         break;
     case DECL_FUNC:
-        printf("(func %s ", decl->name);
-        printf("(");
+        PRINT("(func %s ", decl->name);
+        PRINT("(");
         for (FuncParam* it = decl->func_decl.params; it != decl->func_decl.params + decl->func_decl.num_params; it++)
         {
-            printf(" %s", it->name);
+            PRINT(" %s", it->name);
             print_typespec(it->type);
         }
-        printf(" ) ");
+        PRINT(" ) ");
         if (decl->func_decl.ret_type)
             print_typespec(decl->func_decl.ret_type);
         else
-            printf("nil");
+            PRINT("nil");
         indent++;
         print_newline();
         print_stmt_block(decl->func_decl.block, true);
         indent--;
-        printf(")");
+        PRINT(")");
         break;
     default:
         assert(0);

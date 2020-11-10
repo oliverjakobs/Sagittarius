@@ -6,6 +6,9 @@
 #include "decl.h"
 #include "typespec.h"
 
+void print_to_buf(bool b);
+void flush_print_buf(FILE* file);
+
 void print_typespec(Typespec* type);
 
 void print_expr(Expr* expr);

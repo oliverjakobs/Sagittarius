@@ -6,36 +6,62 @@
 
 const char* token_type_names[] = {
     [TOKEN_EOF] = "EOF",
+    [TOKEN_COLON] = ":",
+    [TOKEN_LPAREN] = "(",
+    [TOKEN_RPAREN] = ")",
+    [TOKEN_LBRACE] = "{",
+    [TOKEN_RBRACE] = "}",
+    [TOKEN_LBRACKET] = "[",
+    [TOKEN_RBRACKET] = "]",
+    [TOKEN_COMMA] = ",",
+    [TOKEN_DOT] = ".",
+    [TOKEN_QUESTION] = "?",
+    [TOKEN_SEMICOLON] = ";",
+    [TOKEN_KEYWORD] = "keyword",
     [TOKEN_INT] = "int",
     [TOKEN_FLOAT] = "float",
     [TOKEN_STR] = "string",
     [TOKEN_NAME] = "name",
+    [TOKEN_MUL] = "*",
+    [TOKEN_DIV] = "/",
+    [TOKEN_MOD] = "%",
+    [TOKEN_BIT_AND] = "&",
     [TOKEN_LSHIFT] = "<<",
     [TOKEN_RSHIFT] = ">>",
+    [TOKEN_ADD] = "+",
+    [TOKEN_SUB] = "-",
+    [TOKEN_BIT_OR] = "|",
+    [TOKEN_BIT_XOR] = "^",
     [TOKEN_EQ] = "==",
     [TOKEN_NOTEQ] = "!=",
+    [TOKEN_LT] = "<",
+    [TOKEN_GT] = ">",
     [TOKEN_LTEQ] = "<=",
     [TOKEN_GTEQ] = ">=",
     [TOKEN_AND] = "&&",
     [TOKEN_OR] = "||",
-    [TOKEN_INC] = "++",
-    [TOKEN_DEC] = "--",
-    [TOKEN_COLON_ASSIGN] = ":=",
+    [TOKEN_ASSIGN] = "=",
     [TOKEN_ADD_ASSIGN] = "+=",
     [TOKEN_SUB_ASSIGN] = "-=",
     [TOKEN_OR_ASSIGN] = "|=",
-    [TOKEN_LSHIFT_ASSIGN] = "<<=",
-    [TOKEN_RSHIFT_ASSIGN] = ">>=",
     [TOKEN_AND_ASSIGN] = "&=",
     [TOKEN_XOR_ASSIGN] = "^=",
     [TOKEN_MUL_ASSIGN] = "*=",
     [TOKEN_DIV_ASSIGN] = "/=",
     [TOKEN_MOD_ASSIGN] = "%=",
+    [TOKEN_LSHIFT_ASSIGN] = "<<=",
+    [TOKEN_RSHIFT_ASSIGN] = ">>=",
+    [TOKEN_INC] = "++",
+    [TOKEN_DEC] = "--",
+    [TOKEN_COLON_ASSIGN] = ":=",
 };
 
 const char* token_type_name(TokenType type)
 {
-    return token_type_names[type];
+    if (type < sizeof(token_type_names) / sizeof(*token_type_names))
+        return token_type_names[type];
+
+    return "<unknown>";
 }
 
 size_t copy_token_type_str(char* dest, size_t dest_size, TokenType type)

@@ -37,13 +37,13 @@ void buf_test()
 
 void keyword_test()
 {
-    assert(is_keyword_str(first_keyword));
-    assert(is_keyword_str(last_keyword));
+    assert(is_keyword_name(first_keyword));
+    assert(is_keyword_name(last_keyword));
     for (const char** it = keywords; it != tb_stretchy_last(keywords); it++)
     {
-        assert(is_keyword_str(*it));
+        assert(is_keyword_name(*it));
     }
-    assert(!is_keyword_str(str_intern("foo")));
+    assert(!is_keyword_name(str_intern("foo")));
 }
 
 #define assert_token(x) assert(match_token(x))
@@ -84,29 +84,27 @@ void lex_test()
 
     /* operator tests */
     init_stream(": := + += ++ < <= << <<=");
-    assert_token(':');
+    assert_token(TOKEN_COLON);
     assert_token(TOKEN_COLON_ASSIGN);
-    assert_token('+');
+    assert_token(TOKEN_ADD);
     assert_token(TOKEN_ADD_ASSIGN);
     assert_token(TOKEN_INC);
-    assert_token('<');
+    assert_token(TOKEN_LT);
     assert_token(TOKEN_LTEQ);
     assert_token(TOKEN_LSHIFT);
     assert_token(TOKEN_LSHIFT_ASSIGN);
     assert_token_eof();
 
-    init_stream("XY+(XY)_HELLO1,234+Foo_34!994");
+    init_stream("XY+(XY)_HELLO1,234+994");
     assert_token_name("XY");
-    assert_token('+');
-    assert_token('(');
+    assert_token(TOKEN_ADD);
+    assert_token(TOKEN_LPAREN);
     assert_token_name("XY");
-    assert_token(')');
+    assert_token(TOKEN_RPAREN);
     assert_token_name("_HELLO1");
-    assert_token(',');
+    assert_token(TOKEN_COMMA);
     assert_token_int(234);
-    assert_token('+');
-    assert_token_name("Foo_34");
-    assert_token('!');
+    assert_token(TOKEN_ADD);
     assert_token_int(994);
     assert_token_eof();
 }
@@ -250,7 +248,7 @@ void run_tests()
 
     parse_test();
 
-    expr_test(); 
+    expr_test();
     stmt_test();
 }
 

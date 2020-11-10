@@ -26,9 +26,9 @@ void* xcalloc(size_t num_elems, size_t elem_size)
     return ptr;
 }
 
-void* xrealloc(void* ptr, size_t num_bytes)
+void* xrealloc(void* block, size_t num_bytes)
 {
-    ptr = realloc(ptr, num_bytes);
+    void* ptr = realloc(block, num_bytes);
     if (!ptr)
     {
         perror("xrealloc failed");

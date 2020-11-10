@@ -18,24 +18,9 @@ typedef enum
     EXPR_UNARY,
     EXPR_BINARY,
     EXPR_TERNARY,
-    EXPR_SIZEOF,
+    EXPR_SIZEOF_EXPR,
+    EXPR_SIZEOF_TYPE,
 } ExprType;
-
-typedef enum 
-{
-    SIZEOF_EXPR,
-    SIZEOF_TYPE,
-} SizeofType;
-
-typedef struct 
-{
-    SizeofType type;
-    union
-    {
-        Expr* expr;
-        Typespec* typespec;
-    };
-} SizeofExpr;
 
 typedef struct
 {
@@ -98,6 +83,8 @@ struct Expr
         double fval;
         const char* strval;
         const char* name;
+        Expr* sizeof_expr;
+        Typespec* sizeof_type;
         CompoundExpr compound;
         CastExpr cast;
         UnaryExpr unary;
@@ -106,7 +93,6 @@ struct Expr
         CallExpr call;
         IndexExpr index;
         FieldExpr field;
-        SizeofExpr sizeof_expr;
     };
 };
 

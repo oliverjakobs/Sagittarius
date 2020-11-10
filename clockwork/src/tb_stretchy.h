@@ -2,6 +2,8 @@
 #define TB_STRETCHY_H
 
 #include <stdlib.h>
+#include <stdarg.h>
+#include <stdio.h>
 
 #define TB_STRETCHY_HDR_ELEM	size_t
 #define TB_STRETCHY_HDR_SIZE	2 * sizeof(TB_STRETCHY_HDR_ELEM)
@@ -12,31 +14,59 @@
 
 #define tb_stretchy__max(a, b) ((a) >= (b) ? (a) : (b))
 
-#define tb_stretchy_push(b, v) (tb_stretchy__grow(((const void**)&(b)), sizeof(*(b))) ? (b)[tb_stretchy__len(b)++] = (v), 1 : 0)
+#define tb_stretchy_push(b, v) (tb_stretchy__grow(((const void**)&(b)), 1, sizeof(*(b))) ? (b)[tb_stretchy__len(b)++] = (v), 1 : 0)
 #define tb_stretchy_size(b) ((b) ? tb_stretchy__len(b) : 0)
 #define tb_stretchy_free(b) ((b) ? (free(tb_stretchy__hdr(b)), (b) = NULL) : 0);
 #define tb_stretchy_last(b) ((b) ? (b) + tb_stretchy__len(b) : NULL)
+#define tb_stretchy_clear(b) ((b) ? tb_stretchy__len(b) = 0 : 0)
 #define tb_stretchy_sizeof(b) (tb_stretchy_size(b) * sizeof(*(b)))
 
-static int tb_stretchy__grow(const void** buf, size_t elem_size)
+static int tb_stretchy__grow(const void** buf, size_t increment, size_t elem_size)
 {
-	if (*buf && tb_stretchy__len(*buf) + 1 < tb_stretchy__cap(*buf))
-		return 1;
+    if (*buf && tb_stretchy__len(*buf) + increment < tb_stretchy__cap(*buf))
+        return 1;
 
-	size_t new_len = tb_stretchy_size(*buf) + 1;
-	size_t new_cap = tb_stretchy__max((*buf ? 2 * tb_stretchy__cap(*buf) : 1), new_len);
-	size_t new_size = TB_STRETCHY_HDR_SIZE + new_cap * elem_size;
+    size_t new_len = tb_stretchy_size(*buf) + increment;
+    size_t new_cap = tb_stretchy__max((*buf ? 2 * tb_stretchy__cap(*buf) : 1), new_len);
+    size_t new_size = TB_STRETCHY_HDR_SIZE + new_cap * elem_size;
 
-	TB_STRETCHY_HDR_ELEM* hdr = realloc(*buf ? tb_stretchy__hdr(*buf) : NULL, new_size);
+    TB_STRETCHY_HDR_ELEM* hdr = realloc(*buf ? tb_stretchy__hdr(*buf) : NULL, new_size);
 
-	if (!hdr) return 0; /* out of memory */
+    if (!hdr) return 0; /* out of memory */
 
-	hdr[0] = new_cap;
-	if (!*buf) hdr[1] = 0;
+    hdr[0] = new_cap;
+    if (!*buf) hdr[1] = 0;
 
-	*buf = hdr + 2;
+    *buf = hdr + 2;
 
-	return 1;
+    return 1;
+}
+
+static int tb_stretchy_printf(char** buf, const char* fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+    size_t n = vsnprintf(NULL, 0, fmt, args);
+    va_end(args);
+    if (tb_stretchy_size(*buf) == 0)
+        n++;
+
+    if (!tb_stretchy__grow(buf, n, sizeof(char)))
+        return 0;
+
+    size_t len = tb_stretchy__len(*buf);
+    size_t cap = tb_stretchy__cap(*buf);
+
+    size_t offset = len == 0 ? 0 : len - 1;
+
+    va_start(args, fmt);
+
+    vsnprintf(*buf + offset, cap - len, fmt, args);
+
+    va_end(args);
+    tb_stretchy__len(*buf) += n;
+
+    return 1;
 }
 
 #endif // !TB_STRETCHY_H

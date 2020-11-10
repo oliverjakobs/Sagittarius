@@ -18,6 +18,8 @@ bool expect_token(TokenType type);
 Token* get_token();
 TokenType get_token_type();
 
+const char* token_info();
+
 const char* typedef_keyword;
 const char* enum_keyword;
 const char* struct_keyword;
@@ -45,7 +47,7 @@ const char** keywords;
 void init_keywords();
 
 bool is_keyword(const char* name);
-bool is_keyword_str(const char* str);
+bool is_keyword_name(const char* name);
 
 bool match_keyword(const char* name);
 

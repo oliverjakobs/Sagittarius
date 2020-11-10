@@ -197,17 +197,25 @@ void scan_str()
     token.strval = str;
 }
 
-#define TOKEN_CASE1(c, c1, t1) \
+#define TOKEN_CASE1(c, t) \
     case c: \
-        token.type = *stream++; \
-        if (*stream == c1) { token.type = t1; stream++; } \
+        token.type = t; \
+        stream++; \
         break;
 
-#define TOKEN_CASE2(c, c1, t1, c2, t2) \
-    case c: \
-        token.type = *stream++; \
-        if (*stream == c1) { token.type = t1; stream++; } \
-        else if (*stream == c2) { token.type = t2; stream++; } \
+#define TOKEN_CASE2(c1, t1, c2, t2) \
+    case c1: \
+        token.type = t1; \
+        stream++; \
+        if (*stream == c2) { token.type = t2; stream++; } \
+        break;
+
+#define TOKEN_CASE3(c1, t1, c2, t2, c3, t3) \
+    case c1: \
+        token.type = t1; \
+        stream++; \
+        if (*stream == c2) { token.type = t2; stream++; } \
+        else if (*stream == c3) { token.type = t3; stream++; } \
         break;
 
 void next_token()
@@ -254,10 +262,11 @@ repeat:
             stream++;
 
         token.name = str_intern_range(token.start, stream);
-        token.type = is_keyword_str(token.name) ? TOKEN_KEYWORD : TOKEN_NAME;
+        token.type = is_keyword_name(token.name) ? TOKEN_KEYWORD : TOKEN_NAME;
         break;
     case '<':
-        token.type = *stream++;
+        token.type = TOKEN_LT;
+        stream++;
         if (*stream == '<')
         {
             token.type = TOKEN_LSHIFT;
@@ -275,7 +284,8 @@ repeat:
         }
         break;
     case '>':
-        token.type = *stream++;
+        token.type = TOKEN_GT;
+        stream++;
         if (*stream == '>')
         {
             token.type = TOKEN_RSHIFT;
@@ -292,25 +302,37 @@ repeat:
             stream++;
         }
         break;
-    TOKEN_CASE1('=', '=', TOKEN_EQ)
-    TOKEN_CASE1('^', '=', TOKEN_XOR_ASSIGN)
-    TOKEN_CASE1(':', '=', TOKEN_COLON_ASSIGN)
-    TOKEN_CASE1('*', '=', TOKEN_MUL_ASSIGN)
-    TOKEN_CASE1('/', '=', TOKEN_DIV_ASSIGN)
-    TOKEN_CASE1('%', '=', TOKEN_MOD_ASSIGN)
-    TOKEN_CASE2('+', '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC)
-    TOKEN_CASE2('-', '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC)
-    TOKEN_CASE2('&', '=', TOKEN_AND_ASSIGN, '&', TOKEN_AND)
-    TOKEN_CASE2('|', '=', TOKEN_OR_ASSIGN, '|', TOKEN_OR)
+    TOKEN_CASE1('\0', TOKEN_EOF)
+    TOKEN_CASE1('(', TOKEN_LPAREN)
+    TOKEN_CASE1(')', TOKEN_RPAREN)
+    TOKEN_CASE1('{', TOKEN_LBRACE)
+    TOKEN_CASE1('}', TOKEN_RBRACE)
+    TOKEN_CASE1('[', TOKEN_LBRACKET)
+    TOKEN_CASE1(']', TOKEN_RBRACKET)
+    TOKEN_CASE1(',', TOKEN_COMMA)
+    TOKEN_CASE1('?', TOKEN_QUESTION)
+    TOKEN_CASE1(';', TOKEN_SEMICOLON)
+    TOKEN_CASE2(':', TOKEN_COLON, '=', TOKEN_COLON_ASSIGN)
+    TOKEN_CASE2('=', TOKEN_ASSIGN, '=', TOKEN_EQ)
+    TOKEN_CASE2('^', TOKEN_BIT_XOR, '=', TOKEN_XOR_ASSIGN)
+    TOKEN_CASE2('*', TOKEN_MUL, '=', TOKEN_MUL_ASSIGN)
+    TOKEN_CASE2('/', TOKEN_DIV, '=', TOKEN_DIV_ASSIGN)
+    TOKEN_CASE2('%', TOKEN_MOD, '=', TOKEN_MOD_ASSIGN)
+    TOKEN_CASE3('+', TOKEN_ADD, '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC)
+    TOKEN_CASE3('-', TOKEN_SUB, '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC)
+    TOKEN_CASE3('&', TOKEN_BIT_AND, '=', TOKEN_ADD_ASSIGN, '&', TOKEN_AND)
+    TOKEN_CASE3('|', TOKEN_BIT_OR, '=', TOKEN_OR_ASSIGN, '|', TOKEN_OR)
     default:
-        token.type = *stream++;
-        break;
+        syntax_error("Invalid '%c' token, skipping", *stream);
+        stream++;
+        goto repeat;
     }
     token.end = stream;
 }
 
 #undef TOKEN_CASE1
 #undef TOKEN_CASE2
+#undef TOKEN_CASE3
 
 bool is_token(TokenType type)
 {
@@ -359,6 +381,13 @@ TokenType get_token_type()
     return token.type;
 }
 
+const char* token_info()
+{
+    if (token.type == TOKEN_NAME || token.type == TOKEN_KEYWORD)
+        return token.name;
+    else
+        return token_type_name(token.type);
+}
 
 #define KEYWORD(name) name##_keyword = str_intern(#name); tb_stretchy_push(keywords, name##_keyword)
 void init_keywords()
@@ -400,9 +429,9 @@ bool is_keyword(const char* name)
     return is_token(TOKEN_KEYWORD) && token.name == name;
 }
 
-bool is_keyword_str(const char* str)
+bool is_keyword_name(const char* name)
 {
-    return first_keyword <= str && str <= last_keyword;
+    return first_keyword <= name && name <= last_keyword;
 }
 
 bool match_keyword(const char* name)
@@ -420,24 +449,22 @@ bool match_keyword(const char* name)
 
 bool is_unary_op()
 {
-    return is_token('+') || is_token('-') || is_token('*') || is_token('&');
+    return is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIT_AND);
 }
 
 bool is_mul_op()
 {
-    return is_token('*') || is_token('/') || is_token('%') || is_token('&') 
-        || is_token(TOKEN_LSHIFT) || is_token(TOKEN_RSHIFT);
+    return TOKEN_FIRST_MUL <= token.type && token.type <= TOKEN_LAST_MUL;
 }
 
 bool is_add_op()
 {
-    return is_token('+') || is_token('-') || is_token('|') || is_token('^');
+    return TOKEN_FIRST_ADD <= token.type && token.type <= TOKEN_LAST_ADD;
 }
 
 bool is_cmp_op()
 {
-    return is_token('<') || is_token('>') || is_token(TOKEN_EQ) || is_token(TOKEN_NOTEQ) 
-        || is_token(TOKEN_GTEQ) || is_token(TOKEN_LTEQ);
+    return TOKEN_FIRST_CMP <= token.type && token.type <= TOKEN_LAST_CMP;
 }
 
 bool is_assign_op()
