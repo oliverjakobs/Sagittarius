@@ -2,6 +2,7 @@
 
 #include "lex.h"
 #include "parse.h"
+#include "resolve.h"
 
 void str_intern_test()
 {
@@ -236,6 +237,16 @@ void stmt_test()
     }
 }
 
+void resolve_test()
+{
+    const char* foo = str_intern("foo");
+    assert(symbol_get(foo) == NULL);
+    Decl* decl = decl_const(foo, expr_int(42));
+    symbol_put(decl);
+    Symbol* sym = symbol_get(foo);
+    assert(sym && sym->decl == decl);
+}
+
 void run_tests()
 {
     buf_test();
@@ -244,12 +255,16 @@ void run_tests()
     init_keywords();
     keyword_test();
 
+    /*
     lex_test();
 
     parse_test();
 
     expr_test();
     stmt_test();
+    */
+
+    resolve_test();
 }
 
 int main(int argc, char** argv)
