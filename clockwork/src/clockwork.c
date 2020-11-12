@@ -245,6 +245,19 @@ void resolve_test()
     symbol_put(decl);
     Symbol* sym = symbol_get(foo);
     assert(sym && sym->decl == decl);
+
+    Type* int_ptr = type_pointer(type_int());
+    assert(int_ptr == type_pointer(type_int()));
+    Type* float4_array = type_array(type_float(), 4);
+    assert(float4_array == type_array(type_float(), 4));
+    assert(float4_array != type_array(type_float(), 3));
+
+    Type* int_int_func = type_func((Type*[]) { type_int() }, 1, type_int());
+    assert(int_int_func == type_func((Type*[]) { type_int() }, 1, type_int()));
+
+    Type* int_func = type_func(NULL, 0, type_int());
+    assert(int_int_func != int_func);
+    assert(int_func == type_func(NULL, 0, type_int()));
 }
 
 void run_tests()
