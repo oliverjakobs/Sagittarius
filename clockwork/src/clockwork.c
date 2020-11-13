@@ -169,7 +169,7 @@ void stmt_test()
         stmt_break(),
         stmt_continue(),
         stmt_block(
-            (StmtBlock) {
+            (StmtList) {
                 (Stmt*[]) {
                     stmt_break(),
                     stmt_continue()
@@ -180,20 +180,20 @@ void stmt_test()
         stmt_auto("x", expr_int(42)),
         stmt_if(
             expr_name("flag1"),
-            (StmtBlock) {
+            (StmtList) {
                 (Stmt*[]) {
                     stmt_return(expr_int(1))
                 }, 1,
             },
             (ElseIf[]) {
                 expr_name("flag2"),
-                (StmtBlock) {
+                (StmtList) {
                     (Stmt*[]) {
                         stmt_return(expr_int(2))
                     }, 1,
                 }
             }, 1,
-            (StmtBlock) {
+            (StmtList) {
                 (Stmt*[]) {
                     stmt_return(expr_int(3))
                 }, 1,
@@ -201,7 +201,7 @@ void stmt_test()
         ),
         stmt_while(
             expr_name("running"),
-            (StmtBlock) {
+            (StmtList) {
                 (Stmt*[]) {
                     stmt_assign(TOKEN_ADD_ASSIGN, expr_name("i"), expr_int(16)),
                 }, 1,
@@ -212,7 +212,7 @@ void stmt_test()
             (SwitchCase[]) { 
                 {
                     (Expr*[]) { expr_int(3), expr_int(4) }, 2, false,
-                    (StmtBlock) {
+                    (StmtList) {
                         (Stmt*[]) {
                             stmt_return(expr_name("val"))
                         }, 1,
@@ -220,7 +220,7 @@ void stmt_test()
                 },
                 {
                     (Expr*[]){ expr_int(1) }, 1, true,
-                    (StmtBlock) {
+                    (StmtList) {
                         (Stmt*[]) {
                             stmt_return(expr_int(0))
                         }, 1,
@@ -268,10 +268,10 @@ void run_tests()
     init_keywords();
     keyword_test();
 
-    /*
     lex_test();
 
     parse_test();
+    /*
 
     expr_test();
     stmt_test();

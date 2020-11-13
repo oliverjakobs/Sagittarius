@@ -12,33 +12,27 @@ typedef enum
     TYPESPEC_POINTER,
 } TypespecType;
 
-typedef struct
-{
-    Typespec** args;
-    size_t num_args;
-    Typespec* ret;
-} FuncTypespec;
-
-typedef struct
-{
-    Typespec* elem;
-} PointerTypespec;
-
-typedef struct
-{
-    Typespec* elem;
-    Expr* size;
-} ArrayTypespec;
-
 struct Typespec
 {
     TypespecType type;
     union
     {
         const char* name;
-        FuncTypespec func;
-        ArrayTypespec array;
-        PointerTypespec ptr;
+        struct
+        {
+            Typespec** args;
+            size_t num_args;
+            Typespec* ret;
+        } func;
+        struct
+        {
+            Typespec* elem;
+            Expr* size;
+        } array;
+        struct
+        {
+            Typespec* elem;
+        } ptr;
     };
 };
 

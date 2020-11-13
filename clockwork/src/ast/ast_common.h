@@ -12,7 +12,7 @@ typedef struct
 {
     Stmt** stmts;
     size_t num_stmts;
-} StmtBlock;
+} StmtList;
 
 typedef struct Typespec Typespec;
 

@@ -40,7 +40,7 @@ Decl* decl_var(const char* name, Typespec* type, Expr* expr)
     return decl;
 }
 
-Decl* decl_func(const char* name, FuncParam* params, size_t num_params, Typespec* ret_type, StmtBlock block)
+Decl* decl_func(const char* name, FuncParam* params, size_t num_params, Typespec* ret_type, StmtList block)
 {
     Decl* decl = decl_new(DECL_FUNC, name);
     decl->func_decl.params = params;

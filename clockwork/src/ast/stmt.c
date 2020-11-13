@@ -7,10 +7,24 @@ static Stmt* stmt_new(StmtType type)
     return stmt;
 }
 
+Stmt* stmt_decl(Decl* decl)
+{
+    Stmt* stmt = stmt_new(STMT_RETURN);
+    stmt->decl = decl;
+    return stmt;
+}
+
+Stmt* stmt_expr(Expr* expr)
+{
+    Stmt* stmt = stmt_new(STMT_EXPR);
+    stmt->expr = expr;
+    return stmt;
+}
+
 Stmt* stmt_return(Expr* expr)
 {
     Stmt* stmt = stmt_new(STMT_RETURN);
-    stmt->return_stmt.expr = expr;
+    stmt->expr = expr;
     return stmt;
 }
 
@@ -24,14 +38,14 @@ Stmt* stmt_continue()
     return stmt_new(STMT_CONTINUE);
 }
 
-Stmt* stmt_block(StmtBlock block)
+Stmt* stmt_block(StmtList block)
 {
     Stmt* stmt = stmt_new(STMT_BLOCK);
     stmt->block = block;
     return stmt;
 }
 
-Stmt* stmt_if(Expr* cond, StmtBlock then_block, ElseIf* elseifs, size_t num_elseifs, StmtBlock else_block)
+Stmt* stmt_if(Expr* cond, StmtList then_block, ElseIf* elseifs, size_t num_elseifs, StmtList else_block)
 {
     Stmt* stmt = stmt_new(STMT_IF);
     stmt->if_stmt.cond = cond;
@@ -42,7 +56,7 @@ Stmt* stmt_if(Expr* cond, StmtBlock then_block, ElseIf* elseifs, size_t num_else
     return stmt;
 }
 
-Stmt* stmt_while(Expr* cond, StmtBlock block)
+Stmt* stmt_while(Expr* cond, StmtList block)
 {
     Stmt* stmt = stmt_new(STMT_WHILE);
     stmt->while_stmt.cond = cond;
@@ -50,7 +64,7 @@ Stmt* stmt_while(Expr* cond, StmtBlock block)
     return stmt;
 }
 
-Stmt* stmt_do_while(Expr* cond, StmtBlock block)
+Stmt* stmt_do_while(Expr* cond, StmtList block)
 {
     Stmt* stmt = stmt_new(STMT_DO_WHILE);
     stmt->while_stmt.cond = cond;
@@ -58,7 +72,7 @@ Stmt* stmt_do_while(Expr* cond, StmtBlock block)
     return stmt;
 }
 
-Stmt* stmt_for(Stmt* init, Expr* cond, Stmt* next, StmtBlock block)
+Stmt* stmt_for(Stmt* init, Expr* cond, Stmt* next, StmtList block)
 {
     Stmt* stmt = stmt_new(STMT_FOR);
     stmt->for_stmt.init = init;
@@ -91,12 +105,5 @@ Stmt* stmt_auto(const char* name, Expr* expr)
     Stmt* stmt = stmt_new(STMT_AUTO);
     stmt->auto_stmt.name = name;
     stmt->auto_stmt.expr = expr;
-    return stmt;
-}
-
-Stmt* stmt_expr(Expr* expr)
-{
-    Stmt* stmt = stmt_new(STMT_EXPR);
-    stmt->expr = expr;
     return stmt;
 }

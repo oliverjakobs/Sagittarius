@@ -5,6 +5,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include <assert.h>
+
 #define TB_STRETCHY_HDR_ELEM	size_t
 #define TB_STRETCHY_HDR_SIZE	2 * sizeof(TB_STRETCHY_HDR_ELEM)
 
@@ -46,27 +48,23 @@ static int tb_stretchy_printf(char** buf, const char* fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    size_t n = vsnprintf(NULL, 0, fmt, args);
+    size_t cap = *buf ? tb_stretchy__cap(*buf) - tb_stretchy__len(*buf) : 0;
+    size_t n = vsnprintf(tb_stretchy_last(*buf), cap, fmt, args);
     va_end(args);
-    if (tb_stretchy_size(*buf) == 0)
-        n++;
 
-    if (!tb_stretchy__grow(buf, n, sizeof(char)))
-        return 0;
+    if (n >= cap)
+    {
+        if (!tb_stretchy__grow(buf, n + 1, sizeof(char))) return 0;
+        va_start(args, fmt);
+        cap = tb_stretchy__cap(*buf) - tb_stretchy__len(*buf);
+        n = vsnprintf(tb_stretchy_last(*buf), cap, fmt, args);
+        assert(n < cap);
+        va_end(args);
+    }
 
-    size_t len = tb_stretchy__len(*buf);
-    size_t cap = tb_stretchy__cap(*buf);
-
-    size_t offset = len == 0 ? 0 : len - 1;
-
-    va_start(args, fmt);
-
-    vsnprintf(*buf + offset, cap - len, fmt, args);
-
-    va_end(args);
     tb_stretchy__len(*buf) += n;
 
-    return 1;
+    return (int)n;
 }
 
 #endif // !TB_STRETCHY_H

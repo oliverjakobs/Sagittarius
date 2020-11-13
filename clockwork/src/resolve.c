@@ -133,7 +133,7 @@ Symbol* symbol_get(const char* name)
 
 ConstEntity* resolve_const_expr(Expr* expr)
 {
-
+    return NULL;
 }
 
 void resolve_decl(Decl* decl)

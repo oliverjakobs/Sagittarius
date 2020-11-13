@@ -34,19 +34,16 @@ void print_typespec(Typespec* type)
         PRINT("%s", type->name);
         break;
     case TYPESPEC_FUNC:
-    {
-        FuncTypespec func = type->func;
         PRINT("(func (");
-        for (size_t i = 0; i < func.num_args; ++i)
+        for (size_t i = 0; i < type->func.num_args; ++i)
         {
             PRINT(" ");
-            print_typespec(func.args[i]);
+            print_typespec(type->func.args[i]);
         }
         PRINT(") ");
-        print_typespec(func.ret);
+        print_typespec(type->func.ret);
         PRINT(")");
         break;
-    }
     case TYPESPEC_ARRAY:
         PRINT("(arr ");
         print_typespec(type->array.elem);
@@ -161,7 +158,7 @@ void print_expr(Expr* expr)
     }
 }
 
-static void print_stmt_block(StmtBlock block, bool newlines)
+static void print_stmt_block(StmtList block, bool newlines)
 {
     assert(block.num_stmts != 0);
     PRINT("(block");
@@ -183,9 +180,15 @@ void print_stmt(Stmt* stmt)
 {
     switch (stmt->type)
     {
+    case STMT_DECL:
+        print_decl(stmt->decl);
+        break;
+    case STMT_EXPR:
+        print_expr(stmt->expr);
+        break;
     case STMT_RETURN:
         PRINT("(return ");
-        print_expr(stmt->return_stmt.expr);
+        print_expr(stmt->expr);
         PRINT(")");
         break;
     case STMT_BREAK:
@@ -290,9 +293,6 @@ void print_stmt(Stmt* stmt)
         PRINT("(:= %s ", stmt->auto_stmt.name);
         print_expr(stmt->auto_stmt.expr);
         PRINT(")");
-        break;
-    case STMT_EXPR:
-        print_expr(stmt->expr);
         break;
     default:
         assert(0);

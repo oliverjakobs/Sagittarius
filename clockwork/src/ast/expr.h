@@ -22,58 +22,6 @@ typedef enum
     EXPR_SIZEOF_TYPE,
 } ExprType;
 
-typedef struct
-{
-    Typespec* type;
-    Expr** args;
-    size_t num_args;
-} CompoundExpr;
-
-typedef struct
-{
-    Typespec* type;
-    Expr* expr;
-} CastExpr;
-
-typedef struct
-{
-    TokenType op;
-    Expr* expr;
-} UnaryExpr;
-
-typedef struct
-{
-    TokenType op;
-    Expr* left;
-    Expr* right;
-} BinaryExpr;
-
-typedef struct
-{
-    Expr* cond;
-    Expr* then_expr;
-    Expr* else_expr;
-} TernaryExpr;
-
-typedef struct
-{
-    Expr* expr;
-    Expr** args;
-    size_t num_args;
-} CallExpr;
-
-typedef struct
-{
-    Expr* expr;
-    Expr* index;
-} IndexExpr;
-
-typedef struct
-{
-    Expr* expr;
-    const char* name;
-} FieldExpr;
-
 struct Expr
 {
     ExprType type;
@@ -85,14 +33,50 @@ struct Expr
         const char* name;
         Expr* sizeof_expr;
         Typespec* sizeof_type;
-        CompoundExpr compound;
-        CastExpr cast;
-        UnaryExpr unary;
-        BinaryExpr binary;
-        TernaryExpr ternary;
-        CallExpr call;
-        IndexExpr index;
-        FieldExpr field;
+        struct
+        {
+            Typespec* type;
+            Expr** args;
+            size_t num_args;
+        } compound;
+        struct
+        {
+            Typespec* type;
+            Expr* expr;
+        } cast;
+        struct
+        {
+            TokenType op;
+            Expr* expr;
+        } unary;
+        struct
+        {
+            TokenType op;
+            Expr* left;
+            Expr* right;
+        } binary;
+        struct
+        {
+            Expr* cond;
+            Expr* then_expr;
+            Expr* else_expr;
+        } ternary;
+        struct
+        {
+            Expr* expr;
+            Expr** args;
+            size_t num_args;
+        } call;
+        struct
+        {
+            Expr* expr;
+            Expr* index;
+        } index;
+        struct
+        {
+            Expr* expr;
+            const char* name;
+        } field;
     };
 };
 

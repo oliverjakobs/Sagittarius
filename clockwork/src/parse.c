@@ -306,7 +306,7 @@ Expr* parse_expr()
  * STMT
  * --------------------------------------------------------------------------------------------------
  */
-StmtBlock parse_stmt_block()
+StmtList parse_stmt_block()
 {
     expect_token(TOKEN_LBRACE);
     Stmt** stmts = NULL;
@@ -314,14 +314,14 @@ StmtBlock parse_stmt_block()
         tb_stretchy_push(stmts, parse_stmt());
 
     expect_token(TOKEN_RBRACE);
-    return (StmtBlock) { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
+    return (StmtList) { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
 }
 
 Stmt* parse_stmt_if()
 {
     Expr* cond = parse_paren_expr();
-    StmtBlock then_block = parse_stmt_block();
-    StmtBlock else_block = { 0 };
+    StmtList then_block = parse_stmt_block();
+    StmtList else_block = { 0 };
     ElseIf* elseifs = NULL;
     while (match_keyword(else_keyword))
     {
@@ -347,7 +347,7 @@ Stmt* parse_stmt_while()
 
 Stmt* parse_stmt_do_while()
 {
-    StmtBlock block = parse_stmt_block();
+    StmtList block = parse_stmt_block();
     if (!match_keyword(while_keyword))
     {
         fatal_syntax_error("Expected 'while' after 'do' block");
@@ -438,7 +438,7 @@ SwitchCase parse_stmt_switch_case()
     while (!is_token_eof() && !is_token(TOKEN_RBRACE) && !is_keyword(case_keyword) && !is_keyword(default_keyword))
         tb_stretchy_push(stmts, parse_stmt());
 
-    StmtBlock block = { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
+    StmtList block = { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
     return (SwitchCase) { ast_dup(exprs, tb_stretchy_sizeof(exprs)), tb_stretchy_size(exprs), is_default, block };
 }
 
@@ -613,7 +613,7 @@ Decl* parse_decl_func()
     if (match_token(TOKEN_COLON))
         ret_type = parse_typespec();
 
-    StmtBlock block = parse_stmt_block();
+    StmtList block = parse_stmt_block();
     return decl_func(name, ast_dup(params, tb_stretchy_sizeof(params)), tb_stretchy_size(params), ret_type, block);
 }
 
