@@ -2,95 +2,110 @@
 #define RESOLVE_H
 
 #include "ast/decl.h"
-
-typedef struct Type Type;
-typedef struct TypeField TypeField;
+#include "ast/expr.h"
+#include "ast/typespec.h"
 
 typedef enum
 {
-    TYPEID_INT,
-    TYPEID_FLOAT,
-    TYPEID_POINTER,
-    TYPEID_ARRAY,
-    TYPEID_FUNC,
-    TYPEID_STRUCT,
-    TYPEID_UNION
+    TYPE_NONE,
+    TYPE_INCOMPLETE,
+    TYPE_COMPLETING,
+    TYPE_INT,
+    TYPE_FLOAT,
+    TYPE_POINTER,
+    TYPE_ARRAY,
+    TYPE_STRUCT,
+    TYPE_UNION,
+    TYPE_ENUM,
+    TYPE_FUNC
 } TypeID;
+
+typedef struct Type Type;
+typedef struct Entity Entity;
+
+typedef struct TypeField
+{
+    const char* name;
+    Type* type;
+} TypeField;
 
 struct Type
 {
     TypeID id;
+    size_t size;
+    Entity* entity;
     union
     {
         struct
         {
-            Type* base;
+            Type* elem;
         } ptr;
         struct
         {
-            Type* base;
+            Type* elem;
             size_t size;
         } array;
+        struct
+        {
+            TypeField* fields;
+            size_t num_fields;
+        } aggregate;
         struct
         {
             Type** params;
             size_t num_params;
             Type* ret;
         } func;
-        struct
-        {
-            TypeField* fields;
-            size_t num_fields;
-        } aggregate;
     };
-};
-
-struct TypeField
-{
-    const char* name;
-    Type* type;
 };
 
 Type* type_int();
 Type* type_float();
-Type* type_pointer(Type* base);
-Type* type_array(Type* base, size_t size);
+Type* type_pointer(Type* elem);
+Type* type_array(Type* elem, size_t size);
 Type* type_func(Type** params, size_t num_params, Type* ret);
-Type* type_struct(TypeField* fields, size_t num_fields);
-Type* type_union(TypeField* fields, size_t num_fields);
 
-typedef struct
-{
-    Type* type;
-
-} ConstEntity;
-
-typedef struct
-{
-    // EntityType type;
-    union
-    {
-        ConstEntity const_ent;
-    };
-} Entity;
+void complete_type(Type* type);
 
 typedef enum
 {
-    SYMBOL_UNRESOLVED,
-    SYMBOL_RESOLVING,
-    SYMBOL_RESOLVED
-} SymbolState;
+    ENTITY_NONE,
+    ENTITY_VAR,
+    ENTITY_CONST,
+    ENTITY_FUNC,
+    ENTITY_TYPE,
+    ENTITY_ENUM_CONST,
+} EntityKind;
 
-typedef struct
+typedef enum
+{
+    ENTITY_UNRESOLVED,
+    ENTITY_RESOLVING,
+    ENTITY_RESOLVED,
+} EntityState;
+
+struct Entity
 {
     const char* name;
+    EntityKind kind;
+    EntityState state;
     Decl* decl;
-    SymbolState state;
-} Symbol;
+    Type* type;
+    int64_t val;
+};
 
-void symbol_put(Decl* decl);
-Symbol* symbol_get(const char* name);
+Entity** get_entities();
+Entity** get_ordered_entities();
 
-void resolve_symbols();
+Entity* entity_decl(Decl* decl);
+Entity* entity_enum_const(const char* name, Decl* decl);
+
+Entity* entity_get(const char* name);
+
+Entity* entity_install_decl(Decl* decl);
+Entity* entity_install_type(const char* name, Type* type);
+
+void complete_entity(Entity* entity);
+
 
 #endif // !RESOLVE_H

@@ -83,6 +83,9 @@ struct Stmt
     };
 };
 
+StmtList stmt_list(Stmt** stmts, size_t num_stmts);
+SwitchCase switch_case(Expr** exprs, size_t num_exprs, bool is_default, StmtList block);
+
 Stmt* stmt_decl(Decl* decl);
 Stmt* stmt_return(Expr* expr);
 Stmt* stmt_break();

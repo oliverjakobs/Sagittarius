@@ -32,7 +32,7 @@ Typespec* typespec_array(Typespec* elem, Expr* size)
 Typespec* typespec_func(Typespec** args, size_t num_args, Typespec* ret)
 {
     Typespec* typespec = typespec_new(TYPESPEC_FUNC);
-    typespec->func.args = args;
+    typespec->func.args = ast_dup(args, sizeof(Typespec*) * num_args);
     typespec->func.num_args = num_args;
     typespec->func.ret = ret;
     return typespec;

@@ -237,7 +237,15 @@ repeat:
         scan_str();
         break;
     case '.':
-        scan_float();
+        if (isdigit(stream[1]))
+        {
+            scan_float();
+        }
+        else
+        {
+            token.type = TOKEN_DOT;
+            stream++;
+        }
         break;
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
         while (isdigit(*stream)) {
@@ -313,14 +321,15 @@ repeat:
     TOKEN_CASE1('?', TOKEN_QUESTION)
     TOKEN_CASE1(';', TOKEN_SEMICOLON)
     TOKEN_CASE2(':', TOKEN_COLON, '=', TOKEN_COLON_ASSIGN)
+    TOKEN_CASE2('!', TOKEN_EXCLAMATION, '=', TOKEN_NOTEQ)
     TOKEN_CASE2('=', TOKEN_ASSIGN, '=', TOKEN_EQ)
     TOKEN_CASE2('^', TOKEN_BIT_XOR, '=', TOKEN_XOR_ASSIGN)
-    TOKEN_CASE2('*', TOKEN_MUL, '=', TOKEN_MUL_ASSIGN)
-    TOKEN_CASE2('/', TOKEN_DIV, '=', TOKEN_DIV_ASSIGN)
-    TOKEN_CASE2('%', TOKEN_MOD, '=', TOKEN_MOD_ASSIGN)
-    TOKEN_CASE3('+', TOKEN_ADD, '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC)
-    TOKEN_CASE3('-', TOKEN_SUB, '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC)
-    TOKEN_CASE3('&', TOKEN_BIT_AND, '=', TOKEN_ADD_ASSIGN, '&', TOKEN_AND)
+    TOKEN_CASE2('*', TOKEN_ASTERISK, '=', TOKEN_MUL_ASSIGN)
+    TOKEN_CASE2('/', TOKEN_SLASH, '=', TOKEN_DIV_ASSIGN)
+    TOKEN_CASE2('%', TOKEN_MODULO, '=', TOKEN_MOD_ASSIGN)
+    TOKEN_CASE3('+', TOKEN_PLUS, '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC)
+    TOKEN_CASE3('-', TOKEN_MINUS, '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC)
+    TOKEN_CASE3('&', TOKEN_AMPERSAND, '=', TOKEN_ADD_ASSIGN, '&', TOKEN_AND)
     TOKEN_CASE3('|', TOKEN_BIT_OR, '=', TOKEN_OR_ASSIGN, '|', TOKEN_OR)
     default:
         syntax_error("Invalid '%c' token, skipping", *stream);
@@ -449,7 +458,7 @@ bool match_keyword(const char* name)
 
 bool is_unary_op()
 {
-    return is_token(TOKEN_ADD) || is_token(TOKEN_SUB) || is_token(TOKEN_MUL) || is_token(TOKEN_BIT_AND);
+    return is_token(TOKEN_PLUS) || is_token(TOKEN_MINUS) || is_token(TOKEN_ASTERISK) || is_token(TOKEN_AMPERSAND);
 }
 
 bool is_mul_op()

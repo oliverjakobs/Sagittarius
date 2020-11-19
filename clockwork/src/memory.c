@@ -37,6 +37,13 @@ void* xrealloc(void* block, size_t num_bytes)
     return ptr;
 }
 
+void* memdup(void* src, size_t size)
+{
+    void* dest = xmalloc(size);
+    memcpy(dest, src, size);
+    return dest;
+}
+
 void arena_grow(Arena* arena, size_t min_size)
 {
     size_t size = ALIGN_UP((ARENA_BLOCK_SIZE > min_size) ? ARENA_BLOCK_SIZE : min_size, ARENA_ALIGNMENT);

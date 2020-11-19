@@ -306,9 +306,9 @@ static void print_aggregate_decl(Decl* decl)
     {
         print_newline();
         PRINT("(");
-        print_typespec(it->type);
         for (const char** name = it->names; name != it->names + it->num_names; name++)
-            PRINT(" %s", *name);
+            PRINT("%s ", *name);
+        print_typespec(it->type);
 
         PRINT(")");
     }
@@ -356,7 +356,10 @@ void print_decl(Decl* decl)
         else
             PRINT("nil");
         PRINT(" ");
-        print_expr(decl->var_decl.expr);
+        if (decl->var_decl.expr)
+            print_expr(decl->var_decl.expr);
+        else
+            PRINT("nil");
         PRINT(")");
         break;
     case DECL_CONST:

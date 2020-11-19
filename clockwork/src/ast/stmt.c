@@ -7,6 +7,16 @@ static Stmt* stmt_new(StmtType type)
     return stmt;
 }
 
+StmtList stmt_list(Stmt** stmts, size_t num_stmts)
+{
+    return (StmtList) { ast_dup(stmts, sizeof(Stmt) * num_stmts), num_stmts };
+}
+
+SwitchCase switch_case(Expr** exprs, size_t num_exprs, bool is_default, StmtList block)
+{
+    return (SwitchCase) { ast_dup(exprs, sizeof(Expr*) * num_exprs), num_exprs, is_default, block};
+}
+
 Stmt* stmt_decl(Decl* decl)
 {
     Stmt* stmt = stmt_new(STMT_RETURN);
@@ -50,7 +60,7 @@ Stmt* stmt_if(Expr* cond, StmtList then_block, ElseIf* elseifs, size_t num_elsei
     Stmt* stmt = stmt_new(STMT_IF);
     stmt->if_stmt.cond = cond;
     stmt->if_stmt.then_block = then_block;
-    stmt->if_stmt.elseifs = elseifs;
+    stmt->if_stmt.elseifs = ast_dup(elseifs, num_elseifs);
     stmt->if_stmt.num_elseifs = num_elseifs;
     stmt->if_stmt.else_block = else_block;
     return stmt;

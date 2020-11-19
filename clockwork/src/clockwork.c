@@ -87,7 +87,7 @@ void lex_test()
     init_stream(": := + += ++ < <= << <<=");
     assert_token(TOKEN_COLON);
     assert_token(TOKEN_COLON_ASSIGN);
-    assert_token(TOKEN_ADD);
+    assert_token(TOKEN_PLUS);
     assert_token(TOKEN_ADD_ASSIGN);
     assert_token(TOKEN_INC);
     assert_token(TOKEN_LT);
@@ -98,14 +98,14 @@ void lex_test()
 
     init_stream("XY+(XY)_HELLO1,234+994");
     assert_token_name("XY");
-    assert_token(TOKEN_ADD);
+    assert_token(TOKEN_PLUS);
     assert_token(TOKEN_LPAREN);
     assert_token_name("XY");
     assert_token(TOKEN_RPAREN);
     assert_token_name("_HELLO1");
     assert_token(TOKEN_COMMA);
     assert_token_int(234);
-    assert_token(TOKEN_ADD);
+    assert_token(TOKEN_PLUS);
     assert_token_int(994);
     assert_token_eof();
 }
@@ -239,25 +239,63 @@ void stmt_test()
 
 void resolve_test()
 {
-    const char* foo = str_intern("foo");
-    assert(symbol_get(foo) == NULL);
-    Decl* decl = decl_const(foo, expr_int(42));
-    symbol_put(decl);
-    Symbol* sym = symbol_get(foo);
-    assert(sym && sym->decl == decl);
-
     Type* int_ptr = type_pointer(type_int());
-    assert(int_ptr == type_pointer(type_int()));
+    assert(type_pointer(type_int()) == int_ptr);
+    Type* float_ptr = type_pointer(type_float());
+    assert(type_pointer(type_float()) == float_ptr);
+    assert(int_ptr != float_ptr);
+    Type* int_ptr_ptr = type_pointer(type_pointer(type_int()));
+    assert(type_pointer(type_pointer(type_int())) == int_ptr_ptr);
     Type* float4_array = type_array(type_float(), 4);
-    assert(float4_array == type_array(type_float(), 4));
-    assert(float4_array != type_array(type_float(), 3));
-
+    assert(type_array(type_float(), 4) == float4_array);
+    Type* float3_array = type_array(type_float(), 3);
+    assert(type_array(type_float(), 3) == float3_array);
+    assert(float4_array != float3_array);
     Type* int_int_func = type_func((Type*[]) { type_int() }, 1, type_int());
-    assert(int_int_func == type_func((Type*[]) { type_int() }, 1, type_int()));
-
+    assert(type_func((Type*[]) { type_int() }, 1, type_int()) == int_int_func);
     Type* int_func = type_func(NULL, 0, type_int());
     assert(int_int_func != int_func);
     assert(int_func == type_func(NULL, 0, type_int()));
+
+    const char* int_name = str_intern("int");
+    entity_install_type(int_name, type_int());
+    const char* code[] = {
+        "const n = 1+sizeof(p)",
+        "var p: T*",
+        "var u = *p",
+        "struct T { a: int[n]; }",
+        "var r = &t.a",
+        "var t: T",
+        "typedef S = int[n+m]",
+        "const m = sizeof(t.a)",
+        "var i = n+m",
+        "var q = &i",
+        //        "const n = sizeof(x)",
+        //        "var x: T",
+        //        "struct T { s: S*; }",
+        //        "struct S { t: T[n]; }",
+    };
+    for (size_t i = 0; i < sizeof(code) / sizeof(*code); i++)
+    {
+        init_stream(code[i]);
+        Decl* decl = parse_decl();
+        entity_install_decl(decl);
+    }
+    for (Entity** it = get_entities(); it != tb_stretchy_last(get_entities()); it++)
+    {
+        Entity* entity = *it;
+        complete_entity(entity);
+    }
+    for (Entity** it = get_ordered_entities(); it != tb_stretchy_last(get_ordered_entities()); it++)
+    {
+        Entity* entity = *it;
+        if (entity->decl)
+            print_decl(entity->decl);
+        else
+            printf("%s", entity->name);
+
+        printf("\n");
+    }
 }
 
 void run_tests()
@@ -270,8 +308,8 @@ void run_tests()
 
     lex_test();
 
-    parse_test();
     /*
+    parse_test();
 
     expr_test();
     stmt_test();

@@ -2,10 +2,13 @@
 #define MEMORY_H
 
 #include <stdlib.h>
+#include <string.h>
 
 void* xmalloc(size_t num_bytes);
 void* xcalloc(size_t num_elems, size_t elem_size);
 void* xrealloc(void* ptr, size_t num_bytes);
+
+void* memdup(void* src, size_t size);
 
 #define ALIGN_DOWN(n, a) ((n) & ~((a) - 1))
 #define ALIGN_UP(n, a) ALIGN_DOWN((n) + (a) - 1, (a))

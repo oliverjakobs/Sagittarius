@@ -47,7 +47,7 @@ Expr* expr_call(Expr* expr, Expr** args, size_t num_args)
 {
     Expr* e = expr_new(EXPR_CALL);
     e->call.expr = expr;
-    e->call.args = args;
+    e->call.args = ast_dup(args, sizeof(Expr*) * num_args);
     e->call.num_args = num_args;
     return e;
 }
@@ -72,7 +72,7 @@ Expr* expr_compound(Typespec* type, Expr** args, size_t num_args)
 {
     Expr* expr = expr_new(EXPR_COMPOUND);
     expr->compound.type = type;
-    expr->compound.args = args;
+    expr->compound.args = ast_dup(args, sizeof(Expr*) * num_args);
     expr->compound.num_args = num_args;
     return expr;
 }

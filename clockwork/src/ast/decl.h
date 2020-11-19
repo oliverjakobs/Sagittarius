@@ -73,6 +73,8 @@ struct Decl
     };
 };
 
+AggregateItem aggregate_item(const char** names, size_t num_names, Typespec* type);
+
 Decl* decl_enum(const char* name, EnumItem* items, size_t num_items);
 Decl* decl_struct(const char* name, AggregateItem* items, size_t num_items);
 Decl* decl_union(const char* name, AggregateItem* items, size_t num_items);

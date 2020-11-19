@@ -31,7 +31,7 @@ Typespec* parse_typespec_func()
     {
         ret = parse_typespec();
     }
-    return typespec_func(ast_dup(args, tb_stretchy_sizeof(args)), tb_stretchy_size(args), ret);
+    return typespec_func(args, tb_stretchy_size(args), ret);
 }
 
 Typespec* parse_typespec_base()
@@ -60,7 +60,7 @@ Typespec* parse_typespec_base()
 Typespec* parse_typespec()
 {
     Typespec* type = parse_typespec_base();
-    while (is_token(TOKEN_LBRACKET) || is_token(TOKEN_MUL))
+    while (is_token(TOKEN_LBRACKET) || is_token(TOKEN_ASTERISK))
     {
         if (match_token(TOKEN_LBRACKET))
         {
@@ -73,7 +73,7 @@ Typespec* parse_typespec()
         }
         else
         {
-            assert(is_token(TOKEN_MUL));
+            assert(is_token(TOKEN_ASTERISK));
             next_token();
             type = typespec_pointer(type);
         }
@@ -99,7 +99,7 @@ Expr* parse_expr_compound(Typespec* type)
             tb_stretchy_push(args, parse_expr());
     }
     expect_token(TOKEN_RBRACE);
-    return expr_compound(type, ast_dup(args, tb_stretchy_sizeof(args)), tb_stretchy_size(args));
+    return expr_compound(type, args, tb_stretchy_size(args));
 }
 
 Expr* parse_expr_operand()
@@ -188,7 +188,7 @@ Expr* parse_expr_base()
                     tb_stretchy_push(args, parse_expr());
             }
             expect_token(TOKEN_RPAREN);
-            expr = expr_call(expr, ast_dup(args, tb_stretchy_sizeof(args)), tb_stretchy_size(args));
+            expr = expr_call(expr, args, tb_stretchy_size(args));
         }
         else if (match_token(TOKEN_LBRACKET))
         {
@@ -306,7 +306,7 @@ Expr* parse_expr()
  * STMT
  * --------------------------------------------------------------------------------------------------
  */
-StmtList parse_stmt_block()
+static StmtList parse_stmt_list()
 {
     expect_token(TOKEN_LBRACE);
     Stmt** stmts = NULL;
@@ -314,40 +314,40 @@ StmtList parse_stmt_block()
         tb_stretchy_push(stmts, parse_stmt());
 
     expect_token(TOKEN_RBRACE);
-    return (StmtList) { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
+    return stmt_list(stmts, tb_stretchy_size(stmts));
 }
 
 Stmt* parse_stmt_if()
 {
     Expr* cond = parse_paren_expr();
-    StmtList then_block = parse_stmt_block();
+    StmtList then_block = parse_stmt_list();
     StmtList else_block = { 0 };
     ElseIf* elseifs = NULL;
     while (match_keyword(else_keyword))
     {
         if (!match_keyword(if_keyword))
         {
-            else_block = parse_stmt_block();
+            else_block = parse_stmt_list();
             break;
         }
 
         ElseIf elseif;
         elseif.cond = parse_paren_expr();
-        elseif.block = parse_stmt_block();
+        elseif.block = parse_stmt_list();
         tb_stretchy_push(elseifs, elseif);
     }
-    return stmt_if(cond, then_block, ast_dup(elseifs, tb_stretchy_sizeof(elseifs)), tb_stretchy_size(elseifs), else_block);
+    return stmt_if(cond, then_block, elseifs, tb_stretchy_size(elseifs), else_block);
 }
 
 Stmt* parse_stmt_while()
 {
     Expr* cond = parse_paren_expr();
-    return stmt_while(cond, parse_stmt_block());
+    return stmt_while(cond, parse_stmt_list());
 }
 
 Stmt* parse_stmt_do_while()
 {
-    StmtList block = parse_stmt_block();
+    StmtList block = parse_stmt_list();
     if (!match_keyword(while_keyword))
     {
         fatal_syntax_error("Expected 'while' after 'do' block");
@@ -410,7 +410,7 @@ Stmt* parse_stmt_for()
             syntax_error("Auto statements not allowed in for statement's next clause");
     }
     expect_token(TOKEN_RPAREN);
-    return stmt_for(init, cond, next, parse_stmt_block());
+    return stmt_for(init, cond, next, parse_stmt_list());
 }
 
 SwitchCase parse_stmt_switch_case()
@@ -438,8 +438,8 @@ SwitchCase parse_stmt_switch_case()
     while (!is_token_eof() && !is_token(TOKEN_RBRACE) && !is_keyword(case_keyword) && !is_keyword(default_keyword))
         tb_stretchy_push(stmts, parse_stmt());
 
-    StmtList block = { ast_dup(stmts, tb_stretchy_sizeof(stmts)), tb_stretchy_size(stmts) };
-    return (SwitchCase) { ast_dup(exprs, tb_stretchy_sizeof(exprs)), tb_stretchy_size(exprs), is_default, block };
+    StmtList block = stmt_list(stmts, tb_stretchy_size(stmts));
+    return switch_case(exprs, tb_stretchy_size(exprs), is_default, block);
 }
 
 Stmt* parse_stmt_switch()
@@ -451,7 +451,7 @@ Stmt* parse_stmt_switch()
         tb_stretchy_push(cases, parse_stmt_switch_case());
 
     expect_token(TOKEN_RBRACE);
-    return stmt_switch(expr, ast_dup(cases, tb_stretchy_sizeof(cases)), tb_stretchy_size(cases));
+    return stmt_switch(expr, cases, tb_stretchy_size(cases));
 }
 
 Stmt* parse_stmt()
@@ -467,7 +467,7 @@ Stmt* parse_stmt()
     else if (match_keyword(switch_keyword))
         return parse_stmt_switch();
     else if (is_token(TOKEN_LBRACE))
-        return stmt_block(parse_stmt_block());
+        return stmt_block(parse_stmt_list());
     else if (match_keyword(return_keyword))
     {
         Stmt* stmt = stmt_return(parse_expr());
@@ -519,7 +519,7 @@ Decl* parse_decl_enum()
             tb_stretchy_push(items, parse_decl_enum_item());
     }
     expect_token(TOKEN_RBRACE);
-    return decl_enum(name, ast_dup(items, tb_stretchy_sizeof(items)), tb_stretchy_size(items));
+    return decl_enum(name, items, tb_stretchy_size(items));
 }
 
 AggregateItem parse_decl_aggregate_item()
@@ -532,7 +532,7 @@ AggregateItem parse_decl_aggregate_item()
     expect_token(TOKEN_COLON);
     Typespec* type = parse_typespec();
     expect_token(TOKEN_SEMICOLON);
-    return (AggregateItem) { ast_dup(names, tb_stretchy_sizeof(names)), tb_stretchy_size(names), type };
+    return aggregate_item(names, tb_stretchy_size(names), type);
 }
 
 Decl* parse_decl_aggregate(DeclType type)
@@ -547,9 +547,9 @@ Decl* parse_decl_aggregate(DeclType type)
     expect_token(TOKEN_RBRACE);
 
     if (type == DECL_STRUCT)
-        return decl_struct(name, ast_dup(items, tb_stretchy_sizeof(items)), tb_stretchy_size(items));
+        return decl_struct(name, items, tb_stretchy_size(items));
     else
-        return decl_union(name, ast_dup(items, tb_stretchy_sizeof(items)), tb_stretchy_size(items));
+        return decl_union(name, items, tb_stretchy_size(items));
 }
 
 Decl* parse_decl_var()
@@ -613,8 +613,8 @@ Decl* parse_decl_func()
     if (match_token(TOKEN_COLON))
         ret_type = parse_typespec();
 
-    StmtList block = parse_stmt_block();
-    return decl_func(name, ast_dup(params, tb_stretchy_sizeof(params)), tb_stretchy_size(params), ret_type, block);
+    StmtList block = parse_stmt_list();
+    return decl_func(name, params, tb_stretchy_size(params), ret_type, block);
 }
 
 Decl* parse_decl()

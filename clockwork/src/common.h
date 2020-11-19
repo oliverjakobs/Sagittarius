@@ -48,4 +48,6 @@ static void fatal_syntax_error(const char* fmt, ...)
     exit(1);
 }
 
+#define MAX(a, b) ((a) >= (b) ? (a) : (b))
+
 #endif /* !COMMON_H */
