@@ -26,7 +26,7 @@ const char* struct_keyword;
 const char* union_keyword;
 const char* var_keyword;
 const char* const_keyword;
-const char* func_keyword;
+const char* fn_keyword;
 const char* sizeof_keyword;
 const char* break_keyword;
 const char* continue_keyword;

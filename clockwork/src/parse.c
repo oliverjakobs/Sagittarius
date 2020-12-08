@@ -42,13 +42,15 @@ Typespec* parse_typespec_base()
         next_token();
         return typespec_name(name);
     }
-    else if (match_keyword(func_keyword))
+    else if (match_keyword(fn_keyword))
     {
         return parse_typespec_func();
     }
     else if (match_token(TOKEN_LPAREN))
     {
-        return parse_typespec();
+        Typespec* type = parse_typespec();
+        expect_token(TOKEN_RPAREN);
+        return type;
     }
     else 
     {
@@ -153,7 +155,7 @@ Expr* parse_expr_operand()
     }
     else if (match_token(TOKEN_LPAREN))
     {
-        if (is_token(TOKEN_COLON))
+        if (match_token(TOKEN_COLON))
         {
             Typespec* type = parse_typespec();
             expect_token(TOKEN_RPAREN);
@@ -610,7 +612,7 @@ Decl* parse_decl_func()
     }
     expect_token(TOKEN_RPAREN);
     Typespec* ret_type = NULL;
-    if (match_token(TOKEN_COLON))
+    if (match_token(TOKEN_ARROW))
         ret_type = parse_typespec();
 
     StmtList block = parse_stmt_list();
@@ -631,7 +633,7 @@ Decl* parse_decl()
         return parse_decl_const();
     else if (match_keyword(typedef_keyword))
         return parse_decl_typedef();
-    else if (match_keyword(func_keyword))
+    else if (match_keyword(fn_keyword))
         return parse_decl_func();
 
     fatal_syntax_error("Expected declaration keyword, got %s", temp_token_type_str(get_token_type()));

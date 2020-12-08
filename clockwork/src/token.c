@@ -88,22 +88,3 @@ const char* temp_token_type_str(TokenType type)
     assert(n + 1 <= sizeof(buf));
     return buf;
 }
-
-void print_token(Token token)
-{
-    switch (token.type)
-    {
-    case TOKEN_INT:
-        printf("TOKEN INT: %llu\n", token.ival);
-        break;
-    case TOKEN_FLOAT:
-        printf("TOKEN FLOAT: %f\n", token.fval);
-        break;
-    case TOKEN_NAME:
-        printf("TOKEN NAME: %.*s\n", (int)(token.end - token.start), token.start);
-        break;
-    default:
-        printf("TOKEN '%c'\n", token.type);
-        break;
-    }
-}

@@ -95,7 +95,7 @@
     <ClInclude Include="src\ast\stmt.h" />
     <ClInclude Include="src\ast\typespec.h" />
     <ClInclude Include="src\common.h" />
-    <ClInclude Include="src\ast\print.h" />
+    <ClInclude Include="src\print.h" />
     <ClInclude Include="src\lex.h" />
     <ClInclude Include="src\memory.h" />
     <ClInclude Include="src\parse.h" />
@@ -111,7 +111,7 @@
     <ClCompile Include="src\ast\stmt.c" />
     <ClCompile Include="src\ast\typespec.c" />
     <ClCompile Include="src\clockwork.c" />
-    <ClCompile Include="src\ast\print.c" />
+    <ClCompile Include="src\print.c" />
     <ClCompile Include="src\lex.c" />
     <ClCompile Include="src\memory.c" />
     <ClCompile Include="src\parse.c" />

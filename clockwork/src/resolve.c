@@ -255,7 +255,7 @@ Entity** get_ordered_entities() { return ordered_entities; }
 Type* resolve_typespec(Typespec* typespec);
 Entity* resolve_name(const char* name);
 int64_t resolve_int_const_expr(Expr* expr);
-ResolvedExpr resolve_expr(Expr* expr);
+ResolvedExpr resolve_expr(Expr* expr, Type* expected_type);
 
 void complete_type(Type* type)
 {
@@ -341,7 +341,7 @@ Type* resolve_decl_var(Decl* decl)
 
     if (decl->var_decl.expr)
     {
-        ResolvedExpr result = resolve_expr(decl->var_decl.expr);
+        ResolvedExpr result = resolve_expr(decl->var_decl.expr, NULL);
         if (type && result.type != type)
             fatal("Declared var type does not match inferred type");
 
@@ -354,9 +354,19 @@ Type* resolve_decl_var(Decl* decl)
 Type* resolve_decl_const(Decl* decl, int64_t* val)
 {
     assert(decl->type == DECL_CONST);
-    ResolvedExpr result = resolve_expr(decl->const_decl.expr);
+    ResolvedExpr result = resolve_expr(decl->const_decl.expr, NULL);
     *val = result.val;
     return result.type;
+}
+
+Type* resolve_decl_func(Decl* decl)
+{
+    assert(decl->type == DECL_FUNC);
+    Type** params = NULL;
+    for (size_t i = 0; i < decl->func_decl.num_params; ++i)
+        tb_stretchy_push(params, resolve_typespec(decl->func_decl.params[i].type));
+
+    return type_func(params, tb_stretchy_size(params), resolve_typespec(decl->func_decl.ret_type));
 }
 
 void resolve_entity(Entity* entity)
@@ -383,6 +393,9 @@ void resolve_entity(Entity* entity)
         break;
     case ENTITY_CONST:
         entity->type = resolve_decl_const(entity->decl, &entity->val);
+        break;
+    case ENTITY_FUNC:
+        entity->type = resolve_decl_func(entity->decl);
         break;
     default:
         assert(0);
@@ -414,7 +427,7 @@ Entity* resolve_name(const char* name)
 ResolvedExpr resolve_expr_field(Expr* expr)
 {
     assert(expr->type == EXPR_FIELD);
-    ResolvedExpr left = resolve_expr(expr->field.expr);
+    ResolvedExpr left = resolve_expr(expr->field.expr, NULL);
     Type* type = left.type;
     complete_type(type);
     if (type->id != TYPE_STRUCT && type->id != TYPE_UNION)
@@ -436,19 +449,22 @@ ResolvedExpr resolve_expr_name(Expr* expr)
 {
     assert(expr->type == EXPR_NAME);
     Entity* entity = resolve_name(expr->name);
-    if (entity->kind == ENTITY_VAR)
-        return resolved_lvalue(entity->type);
-    else if (entity->kind == ENTITY_CONST)
-        return resolved_const(entity->val);
 
-    fatal("%s must be a var or const", expr->name);
-    return resolved_null;
+    switch (entity->kind)
+    {
+    case ENTITY_VAR:    return resolved_lvalue(entity->type);
+    case ENTITY_CONST:  return resolved_const(entity->val);
+    case ENTITY_FUNC:   return resolved_rvalue(entity->type);
+    default:
+        fatal("%s must be a var, const or func", expr->name);
+        return resolved_null;
+    }
 }
 
 ResolvedExpr resolve_expr_unary(Expr* expr)
 {
     assert(expr->type == EXPR_UNARY);
-    ResolvedExpr operand = resolve_expr(expr->unary.expr);
+    ResolvedExpr operand = resolve_expr(expr->unary.expr, NULL);
     Type* type = operand.type;
     switch (expr->unary.op)
     {
@@ -472,8 +488,8 @@ ResolvedExpr resolve_expr_binary(Expr* expr)
 {
     assert(expr->type == EXPR_BINARY);
     assert(expr->binary.op == TOKEN_PLUS);
-    ResolvedExpr left = resolve_expr(expr->binary.left);
-    ResolvedExpr right = resolve_expr(expr->binary.right);
+    ResolvedExpr left = resolve_expr(expr->binary.left, NULL);
+    ResolvedExpr right = resolve_expr(expr->binary.right, NULL);
 
     if (left.type != type_int())
         fatal("left operand of + must be int");
@@ -487,22 +503,87 @@ ResolvedExpr resolve_expr_binary(Expr* expr)
         return resolved_rvalue(left.type);
 }
 
-ResolvedExpr resolve_expr(Expr* expr) {
+ResolvedExpr resolve_expr_compound(Expr* expr, Type* expected_type)
+{
+    assert(expr->type == EXPR_COMPOUND);
+    if (!expected_type && !expr->compound.type)
+        fatal("Implicitly typed compound literals used in context without expected type");
+
+    Type* type = expected_type;
+    if (expr->compound.type)
+    {
+        type = resolve_typespec(expr->compound.type);
+        if (expected_type && expected_type != type)
+            fatal("Explicit compound literal type does not match expected type");
+    }
+    complete_type(type);
+
+    if (type->id == TYPE_STRUCT || type->id == TYPE_UNION)
+    {
+        if (expr->compound.num_args > type->aggregate.num_fields)
+            fatal("Compound literal has too many fields");
+
+        for (size_t i = 0; i < expr->compound.num_args; ++i)
+        {
+            ResolvedExpr field = resolve_expr(expr->compound.args[i], NULL);
+            if (field.type != type->aggregate.fields[i].type)
+                fatal("Compound literal field type mismatch");
+        }
+    }
+    else if (type->id == TYPE_ARRAY)
+    {
+        if (expr->compound.num_args > type->array.size)
+            fatal("Compound literal has too many elements");
+
+        for (size_t i = 0; i < expr->compound.num_args; ++i)
+        {
+            ResolvedExpr field = resolve_expr(expr->compound.args[i], NULL);
+            if (field.type != type->array.elem)
+                fatal("Compound literal element type mismatch");
+        }
+    }
+    else
+    {
+        fatal("Compound literals can only be used with aggregate and array types");
+    }
+
+    return resolved_rvalue(type);
+}
+
+ResolvedExpr resolve_expr_call(Expr* expr)
+{
+    assert(expr->type == EXPR_CALL);
+    ResolvedExpr func = resolve_expr(expr->call.expr, NULL);
+    complete_type(func.type);
+    if (func.type->id != TYPE_FUNC)
+        fatal("Trying to call non-function value");
+    if (expr->call.num_args != func.type->func.num_params)
+        fatal("Tried to call function with wrong number of arguments");
+
+    for (size_t i = 0; i < expr->call.num_args; ++i)
+    {
+        Type* param_type = func.type->func.params[i];
+        ResolvedExpr arg = resolve_expr(expr->call.args[i], param_type);
+        if (arg.type != param_type)
+            fatal("Function call arg type does not match expected param type");
+    }
+    return resolved_rvalue(func.type->func.ret);
+}
+
+ResolvedExpr resolve_expr(Expr* expr, Type* expected_type)
+{
     switch (expr->type)
     {
-    case EXPR_INT:
-        return resolved_const(expr->ival);
-    case EXPR_NAME:
-        return resolve_expr_name(expr);
-    case EXPR_FIELD:
-        return resolve_expr_field(expr);
-    case EXPR_UNARY:
-        return resolve_expr_unary(expr);
-    case EXPR_BINARY:
-        return resolve_expr_binary(expr);
+    case EXPR_INT:      return resolved_const(expr->ival);
+    case EXPR_NAME:     return resolve_expr_name(expr);
+    case EXPR_COMPOUND: return resolve_expr_compound(expr, expected_type);
+    case EXPR_FIELD:    return resolve_expr_field(expr);
+    case EXPR_UNARY:    return resolve_expr_unary(expr);
+    case EXPR_BINARY:   return resolve_expr_binary(expr);
+    case EXPR_CALL:     return resolve_expr_call(expr);
     case EXPR_SIZEOF_EXPR:
     {
-        ResolvedExpr result = resolve_expr(expr->sizeof_expr);
+        ResolvedExpr result = resolve_expr(expr->sizeof_expr, NULL);
         Type* type = result.type;
         complete_type(type);
         return resolved_const(type->size);
@@ -521,7 +602,7 @@ ResolvedExpr resolve_expr(Expr* expr) {
 
 int64_t resolve_int_const_expr(Expr* expr)
 {
-    ResolvedExpr result = resolve_expr(expr);
+    ResolvedExpr result = resolve_expr(expr, NULL);
     if (!result.is_const)
         fatal("Expected constant expression");
 

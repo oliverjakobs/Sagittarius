@@ -18,6 +18,7 @@ typedef enum
     TOKEN_QUESTION,
     TOKEN_EXCLAMATION,
     TOKEN_SEMICOLON,
+    TOKEN_ARROW,
     TOKEN_KEYWORD,
     TOKEN_INT,
     TOKEN_FLOAT,
@@ -98,6 +99,5 @@ const char* token_type_name(TokenType type);
 size_t copy_token_type_str(char* dest, size_t dest_size, TokenType type);
 const char* temp_token_type_str(TokenType type);
 
-void print_token(Token token);
 
 #endif /* TOKEN_H */

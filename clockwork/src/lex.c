@@ -218,6 +218,15 @@ void scan_str()
         else if (*stream == c3) { token.type = t3; stream++; } \
         break;
 
+#define TOKEN_CASE4(c1, t1, c2, t2, c3, t3, c4, t4) \
+    case c1: \
+        token.type = t1; \
+        stream++; \
+        if (*stream == c2) { token.type = t2; stream++; } \
+        else if (*stream == c3) { token.type = t3; stream++; } \
+        else if (*stream == c4) { token.type = t4; stream++; } \
+        break;
+
 void next_token()
 {
 repeat:
@@ -328,9 +337,9 @@ repeat:
     TOKEN_CASE2('/', TOKEN_SLASH, '=', TOKEN_DIV_ASSIGN)
     TOKEN_CASE2('%', TOKEN_MODULO, '=', TOKEN_MOD_ASSIGN)
     TOKEN_CASE3('+', TOKEN_PLUS, '=', TOKEN_ADD_ASSIGN, '+', TOKEN_INC)
-    TOKEN_CASE3('-', TOKEN_MINUS, '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC)
     TOKEN_CASE3('&', TOKEN_AMPERSAND, '=', TOKEN_ADD_ASSIGN, '&', TOKEN_AND)
     TOKEN_CASE3('|', TOKEN_BIT_OR, '=', TOKEN_OR_ASSIGN, '|', TOKEN_OR)
+    TOKEN_CASE4('-', TOKEN_MINUS, '=', TOKEN_SUB_ASSIGN, '-', TOKEN_DEC, '>', TOKEN_ARROW)
     default:
         syntax_error("Invalid '%c' token, skipping", *stream);
         stream++;
@@ -412,7 +421,7 @@ void init_keywords()
     KEYWORD(union);
     KEYWORD(const);
     KEYWORD(var);
-    KEYWORD(func);
+    KEYWORD(fn);
     KEYWORD(sizeof);
     KEYWORD(break);
     KEYWORD(continue);

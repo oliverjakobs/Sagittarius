@@ -1,4 +1,4 @@
-#include "ast/print.h"
+#include "print.h"
 
 #include "lex.h"
 #include "parse.h"
@@ -260,6 +260,13 @@ void resolve_test()
     const char* int_name = str_intern("int");
     entity_install_type(int_name, type_int());
     const char* code[] = {
+        "struct Vector { x, y: int; }",
+        "fn add(v: Vector, w: Vector) -> Vector { return {v.x + w.x, v.y + w.y}; }",
+        "var v = add(Vector{1,2}, Vector{3,4})"
+        /*
+        "var p: Vector*",
+        "var v = Vector{1,2}",
+        "var a = (:int[3]){1,2,3}",
         "const n = 1+sizeof(p)",
         "var p: T*",
         "var u = *p",
@@ -270,6 +277,7 @@ void resolve_test()
         "const m = sizeof(t.a)",
         "var i = n+m",
         "var q = &i",
+        */
         //        "const n = sizeof(x)",
         //        "var x: T",
         //        "struct T { s: S*; }",
