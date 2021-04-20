@@ -565,7 +565,7 @@ ResolvedExpr resolve_expr_call(Expr* expr)
         Type* param_type = func.type->func.params[i];
         ResolvedExpr arg = resolve_expr(expr->call.args[i], param_type);
         if (arg.type != param_type)
-            fatal("Function call arg type does not match expected param type");
+            fatal("Call argument expression type does not match expected param type");
     }
     return resolved_rvalue(func.type->func.ret);
 }
