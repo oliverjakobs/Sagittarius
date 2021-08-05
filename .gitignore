@@ -2,6 +2,8 @@
 .vscode/
 .vs/
 bin-int/
+build/
 
 #files
 *.user
+run.bat
