@@ -16,7 +16,7 @@ static int cw_disassemble_constant(const char* name, const Chunk* chunk, int off
 {
     uint8_t constant = chunk->bytes[offset + 1].data;
     printf("%-16s %4d '", name, constant);
-    printValue(chunk->constants[constant]);
+    print_value(chunk->constants[constant]);
     printf("'\n");
     return offset + 2;
 }
@@ -52,7 +52,7 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
 }
 
 
-void printValue(Value val)
+void print_value(Value val)
 {
     printf("%g", val);
 }

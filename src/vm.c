@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include "debug.h"
+#include "compiler.h"
 
 static void cw_reset_stack(VM* vm)
 {
@@ -36,7 +37,7 @@ static InterpretResult cw_run(VM* vm)
         for (Value* slot = vm->stack; slot < vm->stack_top; ++slot)
         {
             printf("[ ");
-            printValue(*slot);
+            print_value(*slot);
             printf(" ]");
         }
         printf("\n");
@@ -55,10 +56,10 @@ static InterpretResult cw_run(VM* vm)
             case OP_SUBTRACT: BINARY_OP(-); break;
             case OP_MULTIPLY: BINARY_OP(*); break;
             case OP_DIVIDE:   BINARY_OP(/); break;
-            case OP_NEGATE: cw_push_stack(vm, -cw_pop_stack(vm)); break;
+            case OP_NEGATE:   cw_push_stack(vm, -cw_pop_stack(vm)); break;
             case OP_RETURN:
             {
-                printValue(cw_pop_stack(vm));
+                print_value(cw_pop_stack(vm));
                 printf("\n");
                 return INTERPRET_OK;
             }
@@ -70,11 +71,22 @@ static InterpretResult cw_run(VM* vm)
 #undef READ_BYTE
 }
 
-InterpretResult cw_interpret(VM* vm, Chunk* chunk)
+InterpretResult cw_interpret(VM* vm, const char* src)
 {
-    vm->chunk = chunk;
-    vm->ip = vm->chunk->bytes;
-    return cw_run(vm);
+    Chunk chunk;
+    cw_chunk_init(&chunk);
+
+    InterpretResult result = INTERPRET_COMPILE_ERROR;
+    if (cw_compile(src, &chunk))
+    {
+        vm->chunk = &chunk;
+        vm->ip = vm->chunk->bytes;
+
+        result = cw_run(vm);
+    }
+
+    cw_chunk_free(&chunk);
+    return result;
 }
 
 void  cw_push_stack(VM* vm, Value val)

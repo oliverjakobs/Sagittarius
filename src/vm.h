@@ -22,7 +22,7 @@ typedef struct
 void cw_vm_init(VM* vm);
 void cw_vm_free(VM* vm);
 
-InterpretResult cw_interpret(VM* vm, Chunk* chunk);
+InterpretResult cw_interpret(VM* vm, const char* src);
 
 void  cw_push_stack(VM* vm, Value val);
 Value cw_pop_stack(VM* vm);
