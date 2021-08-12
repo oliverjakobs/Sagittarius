@@ -1,11 +1,10 @@
 #ifndef CLOCKWORK_COMMON_H
 #define CLOCKWORK_COMMON_H
 
+#include <stdlib.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
-#include "tb_array.h"
 
 #define DEBUG_PRINT_CODE
 #define DEBUG_TRACE_EXECUTION

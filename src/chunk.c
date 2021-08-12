@@ -9,13 +9,15 @@ void cw_chunk_init(Chunk* chunk)
     chunk->len = 0;
     chunk->cap = 0;
     chunk->constants = NULL;
+    chunk->const_len = 0;
+    chunk->const_cap = 0;
 }
 
 void cw_chunk_free(Chunk* chunk)
 {
     CW_FREE_ARRAY(uint8_t, chunk->bytes, chunk->cap);
     CW_FREE_ARRAY(uint8_t, chunk->lines, chunk->cap);
-    tb_array_free(chunk->constants);
+    CW_FREE_ARRAY(Value, chunk->constants, chunk->const_cap);
     cw_chunk_init(chunk);
 }
 
@@ -36,6 +38,13 @@ void cw_chunk_write(Chunk* chunk, uint8_t byte, int line)
 
 int cw_chunk_add_constant(Chunk* chunk, Value val)
 {
-    tb_array_push(chunk->constants, val);
-    return tb_array_len(chunk->constants) - 1;
+    if (chunk->const_cap < chunk->const_len + 1)
+    {
+        int old_cap = chunk->const_cap;
+        chunk->const_cap = CW_GROW_CAPACITY(old_cap);
+        chunk->constants = CW_GROW_ARRAY(Value, chunk->constants, old_cap, chunk->const_cap);
+    }
+
+    chunk->constants[chunk->const_len] = val;
+    return chunk->const_len++;
 }

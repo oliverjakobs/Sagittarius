@@ -116,9 +116,9 @@ static TokenType cw_identifier_type(Scanner* scanner)
         {
             switch (scanner->start[1])
             {
-                case 'a': return cw_check_keyword(scanner, 2, 3, "lse", TOKEN_FALSE);
-                case 'o': return cw_check_keyword(scanner, 2, 1, "r", TOKEN_FOR);
-                case 'u': return cw_check_keyword(scanner, 2, 6, "nction", TOKEN_FUNC);
+            case 'a': return cw_check_keyword(scanner, 2, 3, "lse", TOKEN_FALSE);
+            case 'o': return cw_check_keyword(scanner, 2, 1, "r", TOKEN_FOR);
+            case 'u': return cw_check_keyword(scanner, 2, 6, "nction", TOKEN_FUNC);
             }
         }
         break;
@@ -133,8 +133,8 @@ static TokenType cw_identifier_type(Scanner* scanner)
         {
             switch (scanner->start[1])
             {
-                case 'h': return cw_check_keyword(scanner, 2, 2, "is", TOKEN_THIS);
-                case 'r': return cw_check_keyword(scanner, 2, 2, "ue", TOKEN_TRUE);
+            case 'h': return cw_check_keyword(scanner, 2, 2, "is", TOKEN_THIS);
+            case 'r': return cw_check_keyword(scanner, 2, 2, "ue", TOKEN_TRUE);
             }
         }
       break;

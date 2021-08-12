@@ -26,12 +26,16 @@ typedef enum
 
 typedef struct 
 {
+    /* byte code with line information */
     uint8_t* bytes;
     int*     lines;
     size_t len;
     size_t cap;
 
+    /* constants */
     Value* constants;
+    size_t const_len;
+    size_t const_cap;
 } Chunk;
 
 void cw_chunk_init(Chunk* chunk);

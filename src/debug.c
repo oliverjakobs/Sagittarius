@@ -16,7 +16,7 @@ static int cw_disassemble_constant(const char* name, const Chunk* chunk, int off
 {
     uint8_t constant = chunk->bytes[offset + 1];
     printf("%-16s %4d '", name, constant);
-    print_value(chunk->constants[constant]);
+    cw_print_value(chunk->constants[constant]);
     printf("'\n");
     return offset + 2;
 }
@@ -61,21 +61,21 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     }
 }
 
-void print_value(Value val)
+void cw_print_value(Value val)
 {
     switch (val.type)
     {
     case VAL_NULL:    printf("null"); break;
     case VAL_BOOL:    printf(AS_BOOL(val) ? "true" : "false"); break;
     case VAL_NUMBER:  printf("%g", AS_NUMBER(val)); break;
-    case VAL_OBJECT:  print_object(val); break;
+    case VAL_OBJECT:  cw_print_object(val); break;
     }
 }
 
-void print_object(Value val)
+void cw_print_object(Value val)
 {
     switch (OBJECT_TYPE(val))
     {
     case OBJ_STRING: printf("%s", AS_RAWSTRING(val)); break;
-  }
+    }
 }

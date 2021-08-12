@@ -9,7 +9,7 @@
 
 static void cw_reset_stack(VM* vm)
 {
-    vm->stack_top = vm->stack;
+    vm->stack_index = 0;
 }
 
 static void cw_runtime_error(VM* vm, const char* format, ...)
@@ -41,19 +41,23 @@ void cw_vm_free(VM* vm)
 
 void  cw_push_stack(VM* vm, Value val)
 {
-    *vm->stack_top = val;
-    vm->stack_top++;
+    if (vm->stack_index >= STACK_MAX)
+    {
+        cw_runtime_error(vm, "Stack overflow");
+        return;
+    }
+
+    vm->stack[vm->stack_index++] = val;
 }
 
 Value cw_pop_stack(VM* vm)
 {
-    vm->stack_top--;
-    return *vm->stack_top;
+    return vm->stack[--vm->stack_index];
 }
 
 static Value cw_peek_stack(VM* vm, int distance)
 {
-    return *(vm->stack_top + (-1 - distance));
+    return vm->stack[vm->stack_index - 1 -distance];
 }
 
 static InterpretResult cw_run(VM* vm)
@@ -76,10 +80,10 @@ static InterpretResult cw_run(VM* vm)
     {
 #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
-        for (Value* slot = vm->stack; slot < vm->stack_top; ++slot)
+        for (Value* slot = vm->stack; slot < vm->stack + vm->stack_index; ++slot)
         {
             printf("[ ");
-            print_value(*slot);
+            cw_print_value(*slot);
             printf(" ]");
         }
         printf("\n");
@@ -144,7 +148,7 @@ static InterpretResult cw_run(VM* vm)
                 break;
             case OP_RETURN:
             {
-                print_value(cw_pop_stack(vm));
+                cw_print_value(cw_pop_stack(vm));
                 printf("\n");
                 return INTERPRET_OK;
             }
