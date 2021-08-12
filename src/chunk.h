@@ -6,23 +6,31 @@
 typedef enum
 {
     OP_CONSTANT,
+    OP_NULL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_EQ,
+    OP_NOTEQ,
+    OP_LT,
+    OP_GT,
+    OP_LTEQ,
+    OP_GTEQ,
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NOT,
     OP_NEGATE,
     OP_RETURN,
 } OpCode;
 
-typedef struct
-{
-    uint8_t data;
-    int line;
-} ByteCode;
-
 typedef struct 
 {
-    ByteCode* bytes;
+    uint8_t* bytes;
+    int*     lines;
+    size_t len;
+    size_t cap;
+
     Value* constants;
 } Chunk;
 

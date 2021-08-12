@@ -98,7 +98,7 @@ static Token cw_make_number(Scanner* scanner)
 
 static TokenType cw_check_keyword(Scanner* scanner, int offset, int len, const char* rest, TokenType type)
 {
-    if (cw_scanner_offset(scanner) != offset + len && memcmp(scanner->start + offset, rest, len) == 0)
+    if (cw_scanner_offset(scanner) == offset + len && memcmp(scanner->start + offset, rest, len) == 0)
         return type;
     return TOKEN_IDENTIFIER;
 }
@@ -184,6 +184,7 @@ Token cw_scan_token(Scanner* scanner)
     case '=': return cw_make_token(scanner, cw_match(scanner, '=') ? TOKEN_EQ : TOKEN_ASSIGN);
     case '<': return cw_make_token(scanner, cw_match(scanner, '=') ? TOKEN_LTEQ : TOKEN_LT); 
     case '>': return cw_make_token(scanner, cw_match(scanner, '=') ? TOKEN_GTEQ : TOKEN_GT);
+    case '"': return cw_make_string(scanner);
     }
 
     return cw_make_error(scanner, "Unexpected character.");

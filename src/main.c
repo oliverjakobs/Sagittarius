@@ -72,7 +72,7 @@ static InterpretResult run_file(VM* vm, const char* path)
 
 int main(int argc, const char* argv[])
 {
-    VM vm;
+    VM vm = { 0 };
     cw_vm_init(&vm);
 
     int status = 0;

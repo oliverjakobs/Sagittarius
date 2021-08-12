@@ -3,9 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "common.h"
-#include "scanner.h"
-
 #ifdef DEBUG_PRINT_CODE
 #include "debug.h"
 #endif
@@ -25,19 +22,7 @@ typedef enum
     PREC_PRIMARY
 } Precedence;
 
-typedef struct
-{
-    Scanner scanner;
-    Chunk* chunk;
-
-    Token current;
-    Token previous;
-    
-    bool error;
-    bool panic;
-} Parser;
-
-typedef void (*ParseCallback)(Parser* parser);
+typedef void (*ParseCallback)(VM* vm, Parser* parser);
 
 typedef struct
 {
@@ -52,7 +37,7 @@ static void cw_error_at(Parser* parser, Token* token, const char* msg)
     if (parser->panic) return;
     parser->panic = true;
 
-    fprintf(stderr, "[line %d] Error", token->line);
+    fprintf(stderr, "[line %d] Parser Error", token->line);
 
     if (token->type == TOKEN_EOF)
         fprintf(stderr, " at end");
@@ -121,10 +106,12 @@ static void cw_consume(Parser* parser, TokenType type, const char* message)
     else                              cw_error_at_current(parser, message);
 }
 
-static void cw_parse_number(Parser* parser);
-static void cw_parse_grouping(Parser* parser);
-static void cw_parse_unary(Parser* parser);
-static void cw_parse_binary(Parser* parser);
+static void cw_parse_number(VM* vm, Parser* parser);
+static void cw_parse_string(VM* vm, Parser* parser);
+static void cw_parse_grouping(VM* vm, Parser* parser);
+static void cw_parse_unary(VM* vm, Parser* parser);
+static void cw_parse_binary(VM* vm, Parser* parser);
+static void cw_parse_literal(VM* vm, Parser* parser);
 
 ParseRule rules[] = {
     [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,               PREC_NONE },
@@ -138,31 +125,31 @@ ParseRule rules[] = {
     [TOKEN_SEMICOLON]   = { NULL,               NULL,               PREC_NONE },
     [TOKEN_SLASH]       = { NULL,               cw_parse_binary,    PREC_FACTOR },
     [TOKEN_ASTERISK]    = { NULL,               cw_parse_binary,    PREC_FACTOR },
-    [TOKEN_EXCLAMATION] = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_NOTEQ]       = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_EXCLAMATION] = { cw_parse_unary,     NULL,               PREC_NONE },
     [TOKEN_ASSIGN]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_EQ]          = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_GT]          = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_GTEQ]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_LT]          = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_LTEQ]        = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_NOTEQ]       = { NULL,               cw_parse_binary,    PREC_EQUALITY },
+    [TOKEN_EQ]          = { NULL,               cw_parse_binary,    PREC_EQUALITY },
+    [TOKEN_LT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
+    [TOKEN_GT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
+    [TOKEN_LTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
+    [TOKEN_GTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_IDENTIFIER]  = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_STRING]      = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_STRING]      = { cw_parse_string,    NULL,               PREC_NONE },
     [TOKEN_NUMBER]      = { cw_parse_number,    NULL,               PREC_NONE },
     [TOKEN_AND]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_CLASS]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_FALSE]       = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_FALSE]       = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_FOR]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_FUNC]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_IF]          = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_NULL]        = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_NULL]        = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_OR]          = { NULL,               NULL,               PREC_NONE },
     [TOKEN_PRINT]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_RETURN]      = { NULL,               NULL,               PREC_NONE },
     [TOKEN_SUPER]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_THIS]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_TRUE]        = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_TRUE]        = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_DECLARE]     = { NULL,               NULL,               PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ERROR]       = { NULL,               NULL,               PREC_NONE },
@@ -171,7 +158,7 @@ ParseRule rules[] = {
 
 static ParseRule* cw_get_parserule(TokenType type) { return &rules[type]; }
 
-static void cw_parse_precedence(Parser* parser, Precedence precedence)
+static void cw_parse_precedence(VM* vm, Parser* parser, Precedence precedence)
 {
     cw_advance(parser);
     ParseCallback prefix_rule = cw_get_parserule(parser->previous.type)->prefix;
@@ -182,56 +169,79 @@ static void cw_parse_precedence(Parser* parser, Precedence precedence)
         return;
     }
 
-    prefix_rule(parser);
+    prefix_rule(vm, parser);
 
     while (precedence <= cw_get_parserule(parser->current.type)->precedence)
     {
         cw_advance(parser);
         ParseCallback infix_rule = cw_get_parserule(parser->previous.type)->infix;
-        infix_rule(parser);
+        infix_rule(vm, parser);
     }
 }
 
-static void cw_parse_expression(Parser* parser)
+static void cw_parse_expression(VM* vm, Parser* parser)
 {
-    cw_parse_precedence(parser, PREC_ASSIGNMENT);
+    cw_parse_precedence(vm, parser, PREC_ASSIGNMENT);
 }
 
-static void cw_parse_number(Parser* parser)
+static void cw_parse_number(VM* vm, Parser* parser)
 {
     double value = strtod(parser->previous.start, NULL);
-    cw_emit_constant(parser, value);
+    cw_emit_constant(parser, MAKE_NUMBER(value));
 }
 
-static void cw_parse_grouping(Parser* parser)
+static void cw_parse_string(VM* vm, Parser* parser)
 {
-    cw_parse_expression(parser);
+    cwString* value = cw_str_copy(vm, parser->previous.start + 1, parser->previous.length - 2);
+    cw_emit_constant(parser, MAKE_OBJECT(value));
+}
+
+static void cw_parse_grouping(VM* vm, Parser* parser)
+{
+    cw_parse_expression(vm, parser);
     cw_consume(parser, TOKEN_RPAREN, "Expect ')' after expression.");
 }
 
-static void cw_parse_unary(Parser* parser)
+static void cw_parse_unary(VM* vm, Parser* parser)
 {
     TokenType operator = parser->previous.type;
-    cw_parse_precedence(parser, PREC_UNARY);
+    cw_parse_precedence(vm, parser, PREC_UNARY);
 
     switch (operator)
     {
-        case TOKEN_MINUS: cw_emit_byte(parser, OP_NEGATE); break;
+        case TOKEN_EXCLAMATION: cw_emit_byte(parser, OP_NOT); break;
+        case TOKEN_MINUS:       cw_emit_byte(parser, OP_NEGATE); break;
     }
 }
 
-static void cw_parse_binary(Parser* parser)
+static void cw_parse_binary(VM* vm, Parser* parser)
 {
     TokenType operator = parser->previous.type;
     ParseRule* rule = cw_get_parserule(operator);
-    cw_parse_precedence(parser, (Precedence)(rule->precedence + 1));
+    cw_parse_precedence(vm, parser, (Precedence)(rule->precedence + 1));
 
     switch (operator)
     {
-        case TOKEN_PLUS:     cw_emit_byte(parser, OP_ADD); break;
-        case TOKEN_MINUS:    cw_emit_byte(parser, OP_SUBTRACT); break;
-        case TOKEN_ASTERISK: cw_emit_byte(parser, OP_MULTIPLY); break;
-        case TOKEN_SLASH:    cw_emit_byte(parser, OP_DIVIDE); break;
+    case TOKEN_EQ:        cw_emit_byte(parser, OP_EQ); break;
+    case TOKEN_NOTEQ:     cw_emit_byte(parser, OP_NOTEQ); break;
+    case TOKEN_LT:        cw_emit_byte(parser, OP_LT); break;
+    case TOKEN_GT:        cw_emit_byte(parser, OP_GT); break;
+    case TOKEN_LTEQ:      cw_emit_byte(parser, OP_LTEQ); break;
+    case TOKEN_GTEQ:      cw_emit_byte(parser, OP_GTEQ); break;
+    case TOKEN_PLUS:      cw_emit_byte(parser, OP_ADD); break;
+    case TOKEN_MINUS:     cw_emit_byte(parser, OP_SUBTRACT); break;
+    case TOKEN_ASTERISK:  cw_emit_byte(parser, OP_MULTIPLY); break;
+    case TOKEN_SLASH:     cw_emit_byte(parser, OP_DIVIDE); break;
+    }
+}
+
+static void cw_parse_literal(VM* vm, Parser* parser)
+{
+    switch (parser->previous.type)
+    {
+    case TOKEN_FALSE: cw_emit_byte(parser, OP_FALSE); break;
+    case TOKEN_NULL:  cw_emit_byte(parser, OP_NULL); break;
+    case TOKEN_TRUE:  cw_emit_byte(parser, OP_TRUE); break;
     }
 }
 
@@ -246,7 +256,7 @@ void cw_compiler_end(Parser* parser)
 #endif 
 }
 
-bool cw_compile(const char* src, Chunk* chunk)
+bool cw_compile(VM* vm, const char* src, Chunk* chunk)
 {
     Parser parser;
     cw_scanner_init(&parser.scanner, src);
@@ -256,7 +266,7 @@ bool cw_compile(const char* src, Chunk* chunk)
     parser.panic = false;
 
     cw_advance(&parser);
-    cw_parse_expression(&parser);
+    cw_parse_expression(vm, &parser);
     cw_consume(&parser, TOKEN_EOF, "Expect end of expression.");
 
     cw_compiler_end(&parser);
