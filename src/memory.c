@@ -30,10 +30,10 @@ static void cw_object_free(Object* object)
     {
     case OBJ_STRING:
     {
-      cwString* str = (cwString*)object;
-      CW_FREE_ARRAY(char, str->raw, str->len + 1);
-      cw_reallocate(object, sizeof(cwString), 0);
-      break;
+        cwString* str = (cwString*)object;
+        CW_FREE_ARRAY(char, str->raw, str->len + 1);
+        cw_reallocate(object, sizeof(cwString), 0);
+        break;
     }
     }
 }
@@ -41,8 +41,9 @@ static void cw_object_free(Object* object)
 cwString* cw_str_alloc(VM* vm, char* src, size_t len)
 {
     cwString* str = (cwString*)cw_object_alloc(vm, sizeof(cwString), OBJ_STRING);
-    str->len = len;
     str->raw = src;
+    str->len = len;
+    str->hash = cw_hash_str(src, len);
     return str;
 }
 

@@ -30,7 +30,7 @@ typedef struct
         bool boolean;
         double num;
         Object* object;
-    } as; 
+    } as;
 } Value;
 
 #define IS_NULL(value)    ((value).type == VAL_NULL)
@@ -67,8 +67,9 @@ struct Object
 struct cwString
 {
     Object obj;
-    size_t len;
     char* raw;
+    size_t len;
+    uint32_t hash;
 };
 
 static inline bool cw_is_obj_type(Value value, ObjectType type) 
@@ -84,5 +85,7 @@ static inline bool cw_is_obj_type(Value value, ObjectType type)
 
 cwString* cw_str_copy(VM* vm, const char* src, size_t len);
 cwString* cw_str_concat(VM* vm, cwString* a, cwString* b);
+
+uint32_t cw_hash_str(const char* str, size_t len);
 
 #endif /* !CLOCKWORK_COMMON_H */

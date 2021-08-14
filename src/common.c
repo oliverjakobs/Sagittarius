@@ -47,3 +47,14 @@ cwString* cw_str_concat(VM* vm, cwString* a, cwString* b)
 
     return cw_str_alloc(vm, raw, len);
 }
+
+uint32_t cw_hash_str(const char* str, size_t len)
+{
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < len; i++)
+    {
+        hash ^= (uint8_t)str[i];
+        hash *= 16777619;
+    }
+    return hash;
+}
