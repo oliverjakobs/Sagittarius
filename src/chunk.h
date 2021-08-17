@@ -24,7 +24,7 @@ typedef enum
     OP_RETURN,
 } OpCode;
 
-typedef struct 
+struct Chunk
 {
     /* byte code with line information */
     uint8_t* bytes;
@@ -36,7 +36,7 @@ typedef struct
     Value* constants;
     size_t const_len;
     size_t const_cap;
-} Chunk;
+};
 
 void cw_chunk_init(Chunk* chunk);
 void cw_chunk_free(Chunk* chunk);

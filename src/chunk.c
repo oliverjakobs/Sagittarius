@@ -16,7 +16,7 @@ void cw_chunk_init(Chunk* chunk)
 void cw_chunk_free(Chunk* chunk)
 {
     CW_FREE_ARRAY(uint8_t, chunk->bytes, chunk->cap);
-    CW_FREE_ARRAY(uint8_t, chunk->lines, chunk->cap);
+    CW_FREE_ARRAY(int, chunk->lines, chunk->cap);
     CW_FREE_ARRAY(Value, chunk->constants, chunk->const_cap);
     cw_chunk_init(chunk);
 }
@@ -28,7 +28,7 @@ void cw_chunk_write(Chunk* chunk, uint8_t byte, int line)
         int old_cap = chunk->cap;
         chunk->cap = CW_GROW_CAPACITY(old_cap);
         chunk->bytes = CW_GROW_ARRAY(uint8_t, chunk->bytes, old_cap, chunk->cap);
-        chunk->lines = CW_GROW_ARRAY(uint8_t, chunk->lines, old_cap, chunk->cap);
+        chunk->lines = CW_GROW_ARRAY(int, chunk->lines, old_cap, chunk->cap);
     }
 
     chunk->bytes[chunk->len] = byte;

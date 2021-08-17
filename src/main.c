@@ -1,11 +1,11 @@
-#include "vm.h"
+#include "runtime.h"
 #include "debug.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void repl(VM* vm)
+static void repl(cwRuntime* cw)
 {
     char line[1024];
     while (true)
@@ -18,7 +18,7 @@ static void repl(VM* vm)
             break;
         }
 
-        cw_interpret(vm, line);
+        cw_interpret(cw, line);
     }
 }
 
@@ -59,12 +59,12 @@ error:
     return NULL;
 }
 
-static InterpretResult run_file(VM* vm, const char* path)
+static InterpretResult run_file(cwRuntime* cw, const char* path)
 {
     char* source = read_file(path);
     if (!source) return INTERPRET_COMPILE_ERROR;
 
-    InterpretResult result = cw_interpret(vm, source);
+    InterpretResult result = cw_interpret(cw, source);
     free(source); 
 
     return result;
@@ -72,18 +72,18 @@ static InterpretResult run_file(VM* vm, const char* path)
 
 int main(int argc, const char* argv[])
 {
-    VM vm = { 0 };
-    cw_vm_init(&vm);
+    cwRuntime cw = { 0 };
+    cw_init(&cw);
 
     int status = 0;
     if (argc == 1) 
-        repl(&vm);
+        repl(&cw);
     else if (argc == 2)
-        status = run_file(&vm, argv[1]);
+        status = run_file(&cw, argv[1]);
     else
         fprintf(stderr, "Usage: clockwork <path>\n");
 
-    cw_vm_free(&vm);
+    cw_free(&cw);
 
     return status;
 }

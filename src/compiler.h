@@ -1,22 +1,32 @@
 #ifndef CLOCKWORK_COMPILER_H
 #define CLOCKWORK_COMPILER_H
 
-#include "vm.h"
 #include "common.h"
-#include "scanner.h"
+
+typedef enum
+{
+    PREC_NONE,
+    PREC_ASSIGNMENT,  // '='
+    PREC_OR,          // or
+    PREC_AND,         // and
+    PREC_EQUALITY,    // '==', '!='
+    PREC_COMPARISON,  // '<', '>', '<=', '>='
+    PREC_TERM,        // '+', '-'
+    PREC_FACTOR,      // '*', '/'
+    PREC_UNARY,       // '!', '-'
+    PREC_CALL,        // '.', '(...)'
+    PREC_PRIMARY
+} Precedence;
+
+typedef void (*ParseCallback)(cwRuntime* cw);
 
 typedef struct
 {
-    Scanner scanner;
-    Chunk* chunk;
+    ParseCallback prefix;
+    ParseCallback infix;
+    Precedence precedence;
+} ParseRule;
 
-    Token current;
-    Token previous;
-    
-    bool error;
-    bool panic;
-} Parser;
-
-bool cw_compile(VM* vm, const char* src, Chunk* chunk);
+bool cw_compile(cwRuntime* cw, const char* src, Chunk* chunk);
 
 #endif /* !CLOCKWORK_COMPILER_H */

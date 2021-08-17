@@ -2,14 +2,15 @@
 #define CLOCKWORK_COMMON_H
 
 #include <stdlib.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define DEBUG_PRINT_CODE
 #define DEBUG_TRACE_EXECUTION
 
-typedef struct VM VM;
+typedef struct cwRuntime cwRuntime;
+typedef struct Chunk Chunk;
 
 typedef struct Object Object;
 typedef struct cwString cwString;
@@ -49,9 +50,7 @@ typedef struct
 
 /* null, false and 0 are falsey and every other value behaves like true */
 bool cw_is_falsey(Value val);
-
 bool cw_values_equal(Value a, Value b);
-
 
 typedef enum
 {
@@ -83,8 +82,13 @@ static inline bool cw_is_obj_type(Value value, ObjectType type)
 #define AS_STRING(value)    ((cwString*)AS_OBJECT(value))
 #define AS_RAWSTRING(value) (AS_STRING(value)->raw)
 
-cwString* cw_str_copy(VM* vm, const char* src, size_t len);
-cwString* cw_str_concat(VM* vm, cwString* a, cwString* b);
+void cw_free_objects(cwRuntime* cw);
+
+cwString* cw_str_take(cwRuntime* cw, char* src, size_t len);
+cwString* cw_str_copy(cwRuntime* cw, const char* src, size_t len);
+cwString* cw_str_concat(cwRuntime* cw, cwString* a, cwString* b);
+
+cwString* cw_find_str(cwRuntime* cw, const char* str, size_t len);
 
 uint32_t cw_hash_str(const char* str, size_t len);
 

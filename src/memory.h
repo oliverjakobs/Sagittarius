@@ -11,8 +11,5 @@
 
 void* cw_reallocate(void* block, size_t old_size, size_t new_size);
 
-cwString* cw_str_alloc(VM* vm, char* src, size_t len);
-
-void cw_free_objects(VM* vm);
 
 #endif /* !CLOCKWORK_MEMORY */

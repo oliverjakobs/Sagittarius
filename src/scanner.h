@@ -1,6 +1,8 @@
 #ifndef CLOCKWORK_SCANNER_H
 #define CLOCKWORK_SCANNER_H
 
+#include "common.h"
+
 typedef enum
 {
     // Single-character tokens.
@@ -61,15 +63,8 @@ typedef struct
   int line;
 } Token;
 
-typedef struct
-{
-    const char* start;
-    const char* current;
-    int line;
-} Scanner;
+void cw_init_scanner(cwRuntime* cw, const char* src);
 
-void cw_scanner_init(Scanner* scanner, const char* src);
-
-Token cw_scan_token(Scanner* scanner);
+Token cw_scan_token(cwRuntime* cw);
 
 #endif /* !CLOCKWORK_SCANNER_H */
