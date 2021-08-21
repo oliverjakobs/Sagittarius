@@ -77,6 +77,7 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_NULL:     cw_push_stack(cw, MAKE_NULL()); break;
             case OP_TRUE:     cw_push_stack(cw, MAKE_BOOL(true)); break;
             case OP_FALSE:    cw_push_stack(cw, MAKE_BOOL(false)); break;
+            case OP_POP:      cw_pop_stack(cw); break;
             case OP_EQ: case OP_NOTEQ:
             {
                 Value b = cw_pop_stack(cw);
@@ -122,12 +123,12 @@ static InterpretResult cw_run(cwRuntime* cw)
                 }
                 cw_push_stack(cw, MAKE_NUMBER(-AS_NUMBER(cw_pop_stack(cw))));
                 break;
-            case OP_RETURN:
-            {
+            case OP_PRINT:
                 cw_print_value(cw_pop_stack(cw));
                 printf("\n");
+                break;
+            case OP_RETURN:
                 return INTERPRET_OK;
-            }
         }
     }
 

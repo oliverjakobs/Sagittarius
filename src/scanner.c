@@ -20,7 +20,7 @@ static inline char cw_peek(const cwRuntime* cw)      { return *cw->cursor; }
 static inline char cw_peek_next(const cwRuntime* cw) { return cw->cursor[1]; }
 static inline char cw_advance(cwRuntime* cw)         { cw->cursor++; return *(cw->cursor-1); }
 
-static inline int cw_cw_offset(const cwRuntime* cw) { return cw->cursor - cw->start; }
+static inline int cw_cursor_offset(const cwRuntime* cw) { return cw->cursor - cw->start; }
 
 static bool cw_match(cwRuntime* cw, char expected)
 {
@@ -29,43 +29,35 @@ static bool cw_match(cwRuntime* cw, char expected)
     return true;
 }
 
-static void cw_skip_whitespaces(cwRuntime* cw)
+static const char* cw_skip_whitespaces(const char* cursor, int* line)
 {
     while (true)
     {
-        switch (cw_peek(cw))
+        switch (*cursor)
         {
         case '\n':
-            cw->line++;
+            *line++;
         case ' ': case '\t': case '\r':
-            cw_advance(cw);
+            cursor++;
             break;
         case '#':
-            while (!cw_isend(cw) && cw_peek(cw) != '\n') cw_advance(cw);
+            while (*cursor != '\0' && *cursor != '\n') cursor++;
             break;
         default:
-            return;
+            return cursor;
         }
     }
 }
 
 static Token cw_make_token(const cwRuntime* cw, TokenType type)
 {
-    Token token;
-    token.type = type;
-    token.start = cw->start;
-    token.length = cw_cw_offset(cw);
-    token.line = cw->line;
+    Token token = { .type = type, .start = cw->start, .length = cw_cursor_offset(cw), .line = cw->line };
     return token;
 }
 
 static Token cw_make_error(const cwRuntime* cw, const char* message)
 {
-    Token token;
-    token.type = TOKEN_ERROR;
-    token.start = message;
-    token.length = strlen(message);
-    token.line = cw->line;
+    Token token = { .type = TOKEN_ERROR, .start = message, .length = strlen(message), .line = cw->line };
     return token;
 }
 
@@ -98,8 +90,7 @@ static Token cw_make_number(cwRuntime* cw)
 
 static TokenType cw_check_keyword(cwRuntime* cw, int offset, int len, const char* rest, TokenType type)
 {
-    if (cw_cw_offset(cw) == offset + len && memcmp(cw->start + offset, rest, len) == 0)
-        return type;
+    if (cw_cursor_offset(cw) == offset + len && memcmp(cw->start + offset, rest, len) == 0) return type;
     return TOKEN_IDENTIFIER;
 }
 
@@ -108,11 +99,11 @@ static TokenType cw_identifier_type(cwRuntime* cw)
     switch (cw->start[0])
     {
     case 'a': return cw_check_keyword(cw, 1, 2, "nd", TOKEN_AND);
-    case 'c': return cw_check_keyword(cw, 1, 4, "lass", TOKEN_CLASS);
+    case 'd': return cw_check_keyword(cw, 1, 7, "atatype", TOKEN_DATATYPE);
     case 'e': return cw_check_keyword(cw, 1, 3, "lse", TOKEN_ELSE);
     case 'i': return cw_check_keyword(cw, 1, 1, "f", TOKEN_IF);
     case 'f':
-        if (cw_cw_offset(cw) > 1)
+        if (cw_cursor_offset(cw) > 1)
         {
             switch (cw->start[1])
             {
@@ -122,22 +113,12 @@ static TokenType cw_identifier_type(cwRuntime* cw)
             }
         }
         break;
-    case 'l': return cw_check_keyword(cw, 1, 2, "et", TOKEN_DECLARE);
+    case 'l': return cw_check_keyword(cw, 1, 2, "et", TOKEN_LET);
     case 'n': return cw_check_keyword(cw, 1, 3, "ull", TOKEN_NULL);
     case 'o': return cw_check_keyword(cw, 1, 1, "r", TOKEN_OR);
     case 'p': return cw_check_keyword(cw, 1, 4, "rint", TOKEN_PRINT);
     case 'r': return cw_check_keyword(cw, 1, 5, "eturn", TOKEN_RETURN);
-    case 's': return cw_check_keyword(cw, 1, 4, "uper", TOKEN_SUPER);
-    case 't':
-        if (cw_cw_offset(cw) > 1)
-        {
-            switch (cw->start[1])
-            {
-            case 'h': return cw_check_keyword(cw, 2, 2, "is", TOKEN_THIS);
-            case 'r': return cw_check_keyword(cw, 2, 2, "ue", TOKEN_TRUE);
-            }
-        }
-      break;
+    case 't': return cw_check_keyword(cw, 1, 3, "rue", TOKEN_RETURN);
     case 'w': return cw_check_keyword(cw, 1, 4, "hile", TOKEN_WHILE);
     }
 
@@ -152,7 +133,7 @@ static Token cw_make_identifier(cwRuntime* cw)
 
 Token cw_scan_token(cwRuntime* cw)
 {
-    cw_skip_whitespaces(cw);
+    cw->cursor = cw_skip_whitespaces(cw->cursor, &cw->line);
     cw->start = cw->cursor;
 
     if (cw_isend(cw)) return cw_make_token(cw, TOKEN_EOF);

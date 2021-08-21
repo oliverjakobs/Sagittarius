@@ -9,6 +9,7 @@ typedef enum
     OP_NULL,
     OP_TRUE,
     OP_FALSE,
+    OP_POP,
     OP_EQ,
     OP_NOTEQ,
     OP_LT,
@@ -21,6 +22,7 @@ typedef enum
     OP_DIVIDE,
     OP_NOT,
     OP_NEGATE,
+    OP_PRINT,
     OP_RETURN,
 } OpCode;
 

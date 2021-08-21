@@ -85,6 +85,37 @@ static void cw_consume(cwRuntime* cw, TokenType type, const char* message)
     else                            cw_error_at_current(cw, message);
 }
 
+static bool cw_match(cwRuntime* cw, TokenType type)
+{
+    if (cw->current.type != type) return false;
+    cw_advance(cw);
+    return true;
+}
+
+static void cw_parser_synchronize(cwRuntime* cw)
+{
+    cw->panic = false;
+
+    while (cw->current.type != TOKEN_EOF)
+    {
+        if (cw->previous.type == TOKEN_SEMICOLON) return;
+        switch (cw->current.type)
+        {
+        case TOKEN_DATATYPE: 
+        case TOKEN_FUNC:
+        case TOKEN_LET:
+        case TOKEN_FOR:
+        case TOKEN_IF:
+        case TOKEN_WHILE:
+        case TOKEN_PRINT:
+        case TOKEN_RETURN:
+            return;
+        }
+
+        cw_advance(cw);
+    }
+}
+
 static void cw_parse_number(cwRuntime* cw);
 static void cw_parse_string(cwRuntime* cw);
 static void cw_parse_grouping(cwRuntime* cw);
@@ -116,7 +147,7 @@ ParseRule rules[] = {
     [TOKEN_STRING]      = { cw_parse_string,    NULL,               PREC_NONE },
     [TOKEN_NUMBER]      = { cw_parse_number,    NULL,               PREC_NONE },
     [TOKEN_AND]         = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_CLASS]       = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_DATATYPE]    = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_FALSE]       = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_FOR]         = { NULL,               NULL,               PREC_NONE },
@@ -126,10 +157,8 @@ ParseRule rules[] = {
     [TOKEN_OR]          = { NULL,               NULL,               PREC_NONE },
     [TOKEN_PRINT]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_RETURN]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_SUPER]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_THIS]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_TRUE]        = { cw_parse_literal,   NULL,               PREC_NONE },
-    [TOKEN_DECLARE]     = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_LET]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ERROR]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_EOF]         = { NULL,               NULL,               PREC_NONE },
@@ -161,6 +190,39 @@ static void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 static void cw_parse_expression(cwRuntime* cw)
 {
     cw_parse_precedence(cw, PREC_ASSIGNMENT);
+}
+
+static void cw_expr_statement(cwRuntime* cw)
+{
+    cw_parse_expression(cw);
+    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after expression.");
+    cw_emit_byte(cw, OP_POP);
+}
+
+static void cw_print_statement(cwRuntime* cw)
+{
+    cw_parse_expression(cw);
+    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after value.");
+    cw_emit_byte(cw, OP_PRINT);
+}
+
+static void cw_parse_statement(cwRuntime* cw)
+{
+    if (cw_match(cw, TOKEN_PRINT))  cw_print_statement(cw);
+    else                            cw_expr_statement(cw);
+}
+
+static void cw_var_decl(cwRuntime* cw)
+{
+
+}
+
+static void cw_parse_declaration(cwRuntime* cw)
+{
+    if (cw_match(cw, TOKEN_LET))    cw_var_decl(cw);
+    else                            cw_parse_statement(cw); 
+
+    if (cw->panic) cw_parser_synchronize(cw);
 }
 
 static void cw_parse_number(cwRuntime* cw)
@@ -244,8 +306,11 @@ bool cw_compile(cwRuntime* cw, const char* src, Chunk* chunk)
     cw->panic = false;
 
     cw_advance(cw);
-    cw_parse_expression(cw);
-    cw_consume(cw, TOKEN_EOF, "Expect end of expression.");
+
+    while (!cw_match(cw, TOKEN_EOF))
+    {
+        cw_parse_declaration(cw);
+    }
 
     cw_compiler_end(cw);
     return !cw->error;

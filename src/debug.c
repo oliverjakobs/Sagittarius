@@ -42,6 +42,7 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     case OP_NULL:       return cw_disassemble_simple("OP_NULL", offset);
     case OP_TRUE:       return cw_disassemble_simple("OP_TRUE", offset);
     case OP_FALSE:      return cw_disassemble_simple("OP_FALSE", offset);
+    case OP_POP:        return cw_disassemble_simple("OP_POP", offset);
     case OP_EQ:         return cw_disassemble_simple("OP_EQ", offset);
     case OP_NOTEQ:      return cw_disassemble_simple("OP_NOTEQ", offset);
     case OP_LT:         return cw_disassemble_simple("OP_LT", offset);
@@ -54,6 +55,7 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     case OP_DIVIDE:     return cw_disassemble_simple("OP_DIVIDE", offset);
     case OP_NOT:        return cw_disassemble_simple("OP_NOT", offset);
     case OP_NEGATE:     return cw_disassemble_simple("OP_NEGATE", offset);
+    case OP_PRINT:      return cw_disassemble_simple("OP_PRINT", offset);
     case OP_RETURN:     return cw_disassemble_simple("OP_RETURN", offset);
     default:
         printf("Unknown opcode %d\n", instruction);
