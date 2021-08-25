@@ -1,6 +1,3 @@
-
-# comment
-"st" + "ri" + "ng" == "string";
-# 1 + 2
-# "str" + "ing"
-# 23 <= 42 
+let beverage = "cafe au lait";
+let breakfast = "beignets with " + beverage;
+print breakfast;

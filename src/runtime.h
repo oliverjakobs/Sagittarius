@@ -45,6 +45,7 @@ struct cwRuntime
     size_t stack_index;
 
     Object* objects;
+    Table globals;
     Table strings;
 };
 

@@ -37,33 +37,21 @@ static void cw_error(cwRuntime* cw, const char* msg)
     cw_error_at(cw, &cw->previous, msg);
 }
 
-/* ----------------------------------| EMIT BYTES |------------------------------------------ */
-static void cw_emit_byte(cwRuntime* cw, uint8_t byte)
-{
-    cw_chunk_write(cw->chunk, byte, cw->previous.line);
-}
-
-static void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b)
-{
-    cw_emit_byte(cw, a);
-    cw_emit_byte(cw, b);
-}
-
-static void cw_emit_return(cwRuntime* cw)
-{
-    cw_emit_byte(cw, OP_RETURN);
-}
-
-static void cw_emit_constant(cwRuntime* cw, Value value)
+static uint8_t cw_make_constant(cwRuntime* cw, Value value)
 {
     int constant = cw_chunk_add_constant(cw->chunk, value);
     if (constant > UINT8_MAX)
     {
         cw_error(cw, "Too many constants in one chunk.");
-        return;
+        return 0;
     }
 
-    cw_emit_bytes(cw, OP_CONSTANT, (uint8_t)constant);
+    return (uint8_t)constant;
+}
+
+static uint8_t cw_identifier_constant(cwRuntime* cw, Token* name)
+{
+    return cw_make_constant(cw, MAKE_OBJECT(cw_str_copy(cw, name->start, name->length)));
 }
 
 /* ----------------------------------| PARSING |--------------------------------------------- */
@@ -105,8 +93,8 @@ static void cw_parser_synchronize(cwRuntime* cw)
         case TOKEN_FUNC:
         case TOKEN_LET:
         case TOKEN_FOR:
-        case TOKEN_IF:
         case TOKEN_WHILE:
+        case TOKEN_IF:
         case TOKEN_PRINT:
         case TOKEN_RETURN:
             return;
@@ -122,6 +110,7 @@ static void cw_parse_grouping(cwRuntime* cw);
 static void cw_parse_unary(cwRuntime* cw);
 static void cw_parse_binary(cwRuntime* cw);
 static void cw_parse_literal(cwRuntime* cw);
+static void cw_parse_variable(cwRuntime* cw);
 
 ParseRule rules[] = {
     [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,               PREC_NONE },
@@ -143,7 +132,7 @@ ParseRule rules[] = {
     [TOKEN_GT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_LTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_GTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
-    [TOKEN_IDENTIFIER]  = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_IDENTIFIER]  = { cw_parse_variable,  NULL,               PREC_NONE },
     [TOKEN_STRING]      = { cw_parse_string,    NULL,               PREC_NONE },
     [TOKEN_NUMBER]      = { cw_parse_number,    NULL,               PREC_NONE },
     [TOKEN_AND]         = { NULL,               NULL,               PREC_NONE },
@@ -214,7 +203,17 @@ static void cw_parse_statement(cwRuntime* cw)
 
 static void cw_var_decl(cwRuntime* cw)
 {
+    /* parse variable name */
+    cw_consume(cw, TOKEN_IDENTIFIER, "Expect variable name.");
+    uint8_t global = cw_identifier_constant(cw, &cw->previous);
 
+    /* parse variable initialization value */
+    if (cw_match(cw, TOKEN_ASSIGN)) cw_parse_expression(cw);
+    else                            cw_error(cw, "Undefined variable.");
+
+    /* define variable */
+    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after var declaration.");
+    cw_emit_bytes(cw, OP_DEF_GLOBAL, global);
 }
 
 static void cw_parse_declaration(cwRuntime* cw)
@@ -228,13 +227,13 @@ static void cw_parse_declaration(cwRuntime* cw)
 static void cw_parse_number(cwRuntime* cw)
 {
     double value = strtod(cw->previous.start, NULL);
-    cw_emit_constant(cw, MAKE_NUMBER(value));
+    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_NUMBER(value)));
 }
 
 static void cw_parse_string(cwRuntime* cw)
 {
     cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.length - 2);
-    cw_emit_constant(cw, MAKE_OBJECT(value));
+    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)));
 }
 
 static void cw_parse_grouping(cwRuntime* cw)
@@ -284,6 +283,12 @@ static void cw_parse_literal(cwRuntime* cw)
     case TOKEN_NULL:  cw_emit_byte(cw, OP_NULL); break;
     case TOKEN_TRUE:  cw_emit_byte(cw, OP_TRUE); break;
     }
+}
+
+static void cw_parse_variable(cwRuntime* cw)
+{
+    uint8_t arg = cw_identifier_constant(cw, &cw->previous);
+    cw_emit_bytes(cw, OP_GET_GLOBAL, arg);
 }
 
 void cw_compiler_end(cwRuntime* cw)

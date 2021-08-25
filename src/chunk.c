@@ -1,6 +1,7 @@
 #include "chunk.h"
 
 #include "memory.h"
+#include "runtime.h"
 
 void cw_chunk_init(Chunk* chunk)
 {
@@ -47,4 +48,20 @@ int cw_chunk_add_constant(Chunk* chunk, Value val)
 
     chunk->constants[chunk->const_len] = val;
     return chunk->const_len++;
+}
+
+void cw_emit_byte(cwRuntime* cw, uint8_t byte)
+{
+    cw_chunk_write(cw->chunk, byte, cw->previous.line);
+}
+
+void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b)
+{
+    cw_emit_byte(cw, a);
+    cw_emit_byte(cw, b);
+}
+
+void cw_emit_return(cwRuntime* cw)
+{
+    cw_emit_byte(cw, OP_RETURN);
 }

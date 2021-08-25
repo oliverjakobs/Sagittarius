@@ -10,12 +10,17 @@ typedef enum
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+    /* global variables */
+    OP_DEF_GLOBAL,
+    OP_GET_GLOBAL,
+    /* comparison operations */
     OP_EQ,
     OP_NOTEQ,
     OP_LT,
     OP_GT,
     OP_LTEQ,
     OP_GTEQ,
+    /* arithmetic operations */
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
@@ -44,5 +49,9 @@ void cw_chunk_init(Chunk* chunk);
 void cw_chunk_free(Chunk* chunk);
 void cw_chunk_write(Chunk* chunk, uint8_t byte, int line);
 int  cw_chunk_add_constant(Chunk* chunk, Value val);
+
+void cw_emit_byte(cwRuntime* cw, uint8_t byte);
+void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b);
+void cw_emit_return(cwRuntime* cw);
 
 #endif /* !CLOCKWORK_CHUNK_H */

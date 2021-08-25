@@ -26,6 +26,7 @@ void cw_init(cwRuntime* cw)
     cw->chunk = NULL;
     cw->ip = NULL;
     cw->objects = NULL;
+    cw_table_init(&cw->globals);
     cw_table_init(&cw->strings);
     cw_reset_stack(cw);
 }
@@ -33,6 +34,7 @@ void cw_init(cwRuntime* cw)
 void cw_free(cwRuntime* cw)
 {
     cw_table_free(&cw->strings);
+    cw_table_free(&cw->globals);
     cw_free_objects(cw);
 }
 
@@ -78,6 +80,25 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_TRUE:     cw_push_stack(cw, MAKE_BOOL(true)); break;
             case OP_FALSE:    cw_push_stack(cw, MAKE_BOOL(false)); break;
             case OP_POP:      cw_pop_stack(cw); break;
+            case OP_DEF_GLOBAL:
+            {
+                cwString* name = AS_STRING(READ_CONSTANT());
+                cw_table_insert(&cw->globals, name, cw_peek_stack(cw, 0));
+                cw_pop_stack(cw);
+                break;
+            }
+            case OP_GET_GLOBAL:
+            {
+                cwString* name = AS_STRING(READ_CONSTANT());
+                Value value;
+                if (!cw_table_find(&cw->globals, name, &value))
+                {
+                    cw_runtime_error(cw, "Undefined variable '%s'.", name->raw);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                cw_push_stack(cw, value);
+                break;
+            }
             case OP_EQ: case OP_NOTEQ:
             {
                 Value b = cw_pop_stack(cw);

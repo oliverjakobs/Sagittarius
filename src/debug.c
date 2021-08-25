@@ -43,6 +43,8 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     case OP_TRUE:       return cw_disassemble_simple("OP_TRUE", offset);
     case OP_FALSE:      return cw_disassemble_simple("OP_FALSE", offset);
     case OP_POP:        return cw_disassemble_simple("OP_POP", offset);
+    case OP_DEF_GLOBAL: return cw_disassemble_constant("OP_DEF_GLOBAL", chunk, offset);
+    case OP_GET_GLOBAL: return cw_disassemble_constant("OP_GET_GLOBAL", chunk, offset);
     case OP_EQ:         return cw_disassemble_simple("OP_EQ", offset);
     case OP_NOTEQ:      return cw_disassemble_simple("OP_NOTEQ", offset);
     case OP_LT:         return cw_disassemble_simple("OP_LT", offset);
