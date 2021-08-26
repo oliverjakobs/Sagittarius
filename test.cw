@@ -1,3 +1,6 @@
-let beverage = "cafe au lait";
-let breakfast = "beignets with " + beverage;
+# Test program
+let breakfast = "beignets"
+let beverage = "cafe au lait"
+breakfast = "beignets with " + beverage
+
 print breakfast;

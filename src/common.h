@@ -10,6 +10,7 @@
 #define DEBUG_TRACE_EXECUTION
 
 typedef struct cwRuntime cwRuntime;
+typedef struct Token Token;
 typedef struct Chunk Chunk;
 
 typedef struct Object Object;

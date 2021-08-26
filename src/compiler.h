@@ -18,7 +18,7 @@ typedef enum
     PREC_PRIMARY
 } Precedence;
 
-typedef void (*ParseCallback)(cwRuntime* cw);
+typedef void (*ParseCallback)(cwRuntime* cw, bool can_assign);
 
 typedef struct
 {

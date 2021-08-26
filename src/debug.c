@@ -1,6 +1,9 @@
 #include "debug.h"
 
 #include <stdio.h>
+#include <stdarg.h>
+
+#include "runtime.h"
 
 void cw_disassemble_chunk(const Chunk* chunk, const char* name)
 {
@@ -44,6 +47,7 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     case OP_FALSE:      return cw_disassemble_simple("OP_FALSE", offset);
     case OP_POP:        return cw_disassemble_simple("OP_POP", offset);
     case OP_DEF_GLOBAL: return cw_disassemble_constant("OP_DEF_GLOBAL", chunk, offset);
+    case OP_SET_GLOBAL: return cw_disassemble_constant("OP_SET_GLOBAL", chunk, offset);
     case OP_GET_GLOBAL: return cw_disassemble_constant("OP_GET_GLOBAL", chunk, offset);
     case OP_EQ:         return cw_disassemble_simple("OP_EQ", offset);
     case OP_NOTEQ:      return cw_disassemble_simple("OP_NOTEQ", offset);
@@ -83,3 +87,37 @@ void cw_print_object(Value val)
     case OBJ_STRING: printf("%s", AS_RAWSTRING(val)); break;
     }
 }
+
+void cw_runtime_error(cwRuntime* cw, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    fputs("\n", stderr);
+
+    size_t instruction = cw->ip - cw->chunk->bytes - 1;
+    int line = cw->chunk->lines[instruction];
+    fprintf(stderr, "[line %d] in script\n", line);
+    cw_reset_stack(cw);
+}
+
+
+void cw_syntax_error(cwRuntime* cw, const char* msg) { cw_syntax_error_at(cw, &cw->previous, msg); }
+
+void cw_syntax_error_at(cwRuntime* cw, Token* token, const char* msg)
+{
+    if (cw->panic) return;
+    cw->panic = true;
+
+    fprintf(stderr, "[line %d] Error", token->line);
+
+    if (token->type == TOKEN_EOF)
+        fprintf(stderr, " at end");
+    else if (token->type != TOKEN_ERROR)
+        fprintf(stderr, " at '%.*s'", token->length, token->start);
+
+    fprintf(stderr, ": %s\n", msg);
+    cw->error = true;
+}
+

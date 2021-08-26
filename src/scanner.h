@@ -6,14 +6,13 @@
 typedef enum
 {
     // Single-character tokens.
-    TOKEN_LPAREN,
-    TOKEN_RPAREN,
-    TOKEN_LBRACE,
-    TOKEN_RBRACE,
+    TOKEN_LPAREN, TOKEN_RPAREN,
+    TOKEN_LBRACE, TOKEN_RBRACE,
     TOKEN_PERIOD,
     TOKEN_COMMA,
     TOKEN_COLON,
     TOKEN_SEMICOLON,
+    TOKEN_TERMINATOR,
     TOKEN_PLUS,
     TOKEN_MINUS,
     TOKEN_ASTERISK,
@@ -21,13 +20,10 @@ typedef enum
     TOKEN_EXCLAMATION, 
     TOKEN_ASSIGN,
 
-    // Two character tokens.
-    TOKEN_EQ,
-    TOKEN_NOTEQ,
-    TOKEN_LT,
-    TOKEN_GT,
-    TOKEN_LTEQ,
-    TOKEN_GTEQ,
+    // Comparison tokens.
+    TOKEN_EQ, TOKEN_NOTEQ,
+    TOKEN_LT, TOKEN_LTEQ,
+    TOKEN_GT, TOKEN_GTEQ,
 
     // Literals.
     TOKEN_IDENTIFIER,
@@ -53,13 +49,13 @@ typedef enum
     TOKEN_ERROR, TOKEN_EOF
 } TokenType;
 
-typedef struct
+struct Token
 {
   TokenType type;
   const char* start;
   int length;
   int line;
-} Token;
+};
 
 void cw_init_scanner(cwRuntime* cw, const char* src);
 

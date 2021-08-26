@@ -7,20 +7,6 @@
 #include "memory.h"
 #include "compiler.h"
 
-static void cw_runtime_error(cwRuntime* cw, const char* format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vfprintf(stderr, format, args);
-    va_end(args);
-    fputs("\n", stderr);
-
-    size_t instruction = cw->ip - cw->chunk->bytes - 1;
-    int line = cw->chunk->lines[instruction];
-    fprintf(stderr, "[line %d] in script\n", line);
-    cw_reset_stack(cw);
-}
-
 void cw_init(cwRuntime* cw)
 {
     cw->chunk = NULL;
@@ -85,6 +71,17 @@ static InterpretResult cw_run(cwRuntime* cw)
                 cwString* name = AS_STRING(READ_CONSTANT());
                 cw_table_insert(&cw->globals, name, cw_peek_stack(cw, 0));
                 cw_pop_stack(cw);
+                break;
+            }
+            case OP_SET_GLOBAL:
+            {
+                cwString* name = AS_STRING(READ_CONSTANT());
+                if (cw_table_insert(&cw->globals, name, cw_peek_stack(cw, 0)))
+                {
+                    cw_table_remove(&cw->globals, name); 
+                    cw_runtime_error(cw, "Undefined variable '%s'.", name->raw);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 break;
             }
             case OP_GET_GLOBAL:

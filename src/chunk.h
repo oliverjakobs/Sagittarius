@@ -12,6 +12,7 @@ typedef enum
     OP_POP,
     /* global variables */
     OP_DEF_GLOBAL,
+    OP_SET_GLOBAL,
     OP_GET_GLOBAL,
     /* comparison operations */
     OP_EQ,

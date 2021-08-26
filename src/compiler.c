@@ -6,43 +6,14 @@
 #include "runtime.h"
 #include "scanner.h"
 
-#ifdef DEBUG_PRINT_CODE
 #include "debug.h"
-#endif
-
-/* ----------------------------------| ERROR |----------------------------------------------- */
-static void cw_error_at(cwRuntime* cw, Token* token, const char* msg)
-{
-    if (cw->panic) return;
-    cw->panic = true;
-
-    fprintf(stderr, "[line %d] Error", token->line);
-
-    if (token->type == TOKEN_EOF)
-        fprintf(stderr, " at end");
-    else if (token->type != TOKEN_ERROR)
-        fprintf(stderr, " at '%.*s'", token->length, token->start);
-
-    fprintf(stderr, ": %s\n", msg);
-    cw->error = true;
-}
-
-static void cw_error_at_current(cwRuntime* cw, const char* msg)
-{
-    cw_error_at(cw, &cw->current, msg);
-}
-
-static void cw_error(cwRuntime* cw, const char* msg)
-{
-    cw_error_at(cw, &cw->previous, msg);
-}
 
 static uint8_t cw_make_constant(cwRuntime* cw, Value value)
 {
     int constant = cw_chunk_add_constant(cw->chunk, value);
     if (constant > UINT8_MAX)
     {
-        cw_error(cw, "Too many constants in one chunk.");
+        cw_syntax_error(cw, "Too many constants in one chunk.");
         return 0;
     }
 
@@ -63,19 +34,35 @@ static void cw_advance(cwRuntime* cw)
         cw->current = cw_scan_token(cw);
         if (cw->current.type != TOKEN_ERROR) break;
 
-        cw_error_at_current(cw, cw->current.start);
+        cw_syntax_error_at(cw, &cw->current, cw->current.start);
     }
 }
 
 static void cw_consume(cwRuntime* cw, TokenType type, const char* message)
 {
     if (cw->current.type == type)   cw_advance(cw);
-    else                            cw_error_at_current(cw, message);
+    else                            cw_syntax_error_at(cw, &cw->current, message);
+}
+
+static void cw_consume_terminator(cwRuntime* cw, const char* message)
+{
+    TokenType type = cw->current.type;
+    if (type == TOKEN_SEMICOLON || type == TOKEN_TERMINATOR)  cw_advance(cw);
+    else                                                      cw_syntax_error_at(cw, &cw->current, message);
 }
 
 static bool cw_match(cwRuntime* cw, TokenType type)
 {
     if (cw->current.type != type) return false;
+    cw_advance(cw);
+    return true;
+}
+
+static bool cw_match_terminator(cwRuntime* cw)
+{
+    TokenType type = cw->current.type;
+    if (type != TOKEN_SEMICOLON && type != TOKEN_TERMINATOR) return false;
+
     cw_advance(cw);
     return true;
 }
@@ -104,13 +91,13 @@ static void cw_parser_synchronize(cwRuntime* cw)
     }
 }
 
-static void cw_parse_number(cwRuntime* cw);
-static void cw_parse_string(cwRuntime* cw);
-static void cw_parse_grouping(cwRuntime* cw);
-static void cw_parse_unary(cwRuntime* cw);
-static void cw_parse_binary(cwRuntime* cw);
-static void cw_parse_literal(cwRuntime* cw);
-static void cw_parse_variable(cwRuntime* cw);
+static void cw_parse_number(cwRuntime* cw, bool can_assign);
+static void cw_parse_string(cwRuntime* cw, bool can_assign);
+static void cw_parse_grouping(cwRuntime* cw, bool can_assign);
+static void cw_parse_unary(cwRuntime* cw, bool can_assign);
+static void cw_parse_binary(cwRuntime* cw, bool can_assign);
+static void cw_parse_literal(cwRuntime* cw, bool can_assign);
+static void cw_parse_variable(cwRuntime* cw, bool can_assign);
 
 ParseRule rules[] = {
     [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,               PREC_NONE },
@@ -122,6 +109,7 @@ ParseRule rules[] = {
     [TOKEN_MINUS]       = { cw_parse_unary,     cw_parse_binary,    PREC_TERM },
     [TOKEN_PLUS]        = { NULL,               cw_parse_binary,    PREC_TERM },
     [TOKEN_SEMICOLON]   = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_TERMINATOR]  = { NULL,               NULL,               PREC_NONE },
     [TOKEN_SLASH]       = { NULL,               cw_parse_binary,    PREC_FACTOR },
     [TOKEN_ASTERISK]    = { NULL,               cw_parse_binary,    PREC_FACTOR },
     [TOKEN_EXCLAMATION] = { cw_parse_unary,     NULL,               PREC_NONE },
@@ -162,17 +150,23 @@ static void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 
     if (!prefix_rule)
     {
-        cw_error(cw, "Expect expression");
+        cw_syntax_error(cw, "Expect expression");
         return;
     }
 
-    prefix_rule(cw);
+    bool can_assign = precedence <= PREC_ASSIGNMENT;
+    prefix_rule(cw, can_assign);
 
     while (precedence <= cw_get_parserule(cw->current.type)->precedence)
     {
         cw_advance(cw);
         ParseCallback infix_rule = cw_get_parserule(cw->previous.type)->infix;
-        infix_rule(cw);
+        infix_rule(cw, can_assign);
+    }
+
+    if (can_assign && cw_match(cw, TOKEN_ASSIGN))
+    {
+        cw_syntax_error(cw, "Invalid assignment target.");
     }
 }
 
@@ -184,14 +178,14 @@ static void cw_parse_expression(cwRuntime* cw)
 static void cw_expr_statement(cwRuntime* cw)
 {
     cw_parse_expression(cw);
-    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after expression.");
+    cw_consume_terminator(cw, "Expect terminator after expression.");
     cw_emit_byte(cw, OP_POP);
 }
 
 static void cw_print_statement(cwRuntime* cw)
 {
     cw_parse_expression(cw);
-    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after value.");
+    cw_consume_terminator(cw, "Expect terminator after value.");
     cw_emit_byte(cw, OP_PRINT);
 }
 
@@ -209,52 +203,54 @@ static void cw_var_decl(cwRuntime* cw)
 
     /* parse variable initialization value */
     if (cw_match(cw, TOKEN_ASSIGN)) cw_parse_expression(cw);
-    else                            cw_error(cw, "Undefined variable.");
+    else                            cw_syntax_error(cw, "Undefined variable.");
 
     /* define variable */
-    cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after var declaration.");
+    cw_consume_terminator(cw, "Expect terminator after var declaration.");
     cw_emit_bytes(cw, OP_DEF_GLOBAL, global);
 }
 
 static void cw_parse_declaration(cwRuntime* cw)
 {
+    if (cw_match_terminator(cw)) return;
+
     if (cw_match(cw, TOKEN_LET))    cw_var_decl(cw);
     else                            cw_parse_statement(cw); 
 
     if (cw->panic) cw_parser_synchronize(cw);
 }
 
-static void cw_parse_number(cwRuntime* cw)
+static void cw_parse_number(cwRuntime* cw, bool can_assign)
 {
     double value = strtod(cw->previous.start, NULL);
     cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_NUMBER(value)));
 }
 
-static void cw_parse_string(cwRuntime* cw)
+static void cw_parse_string(cwRuntime* cw, bool can_assign)
 {
     cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.length - 2);
     cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)));
 }
 
-static void cw_parse_grouping(cwRuntime* cw)
+static void cw_parse_grouping(cwRuntime* cw, bool can_assign)
 {
     cw_parse_expression(cw);
     cw_consume(cw, TOKEN_RPAREN, "Expect ')' after expression.");
 }
 
-static void cw_parse_unary(cwRuntime* cw)
+static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 {
     TokenType operator = cw->previous.type;
     cw_parse_precedence(cw, PREC_UNARY);
 
     switch (operator)
     {
-        case TOKEN_EXCLAMATION: cw_emit_byte(cw, OP_NOT); break;
-        case TOKEN_MINUS:       cw_emit_byte(cw, OP_NEGATE); break;
+    case TOKEN_EXCLAMATION: cw_emit_byte(cw, OP_NOT); break;
+    case TOKEN_MINUS:       cw_emit_byte(cw, OP_NEGATE); break;
     }
 }
 
-static void cw_parse_binary(cwRuntime* cw)
+static void cw_parse_binary(cwRuntime* cw, bool can_assign)
 {
     TokenType operator = cw->previous.type;
     ParseRule* rule = cw_get_parserule(operator);
@@ -275,7 +271,7 @@ static void cw_parse_binary(cwRuntime* cw)
     }
 }
 
-static void cw_parse_literal(cwRuntime* cw)
+static void cw_parse_literal(cwRuntime* cw, bool can_assign)
 {
     switch (cw->previous.type)
     {
@@ -285,10 +281,19 @@ static void cw_parse_literal(cwRuntime* cw)
     }
 }
 
-static void cw_parse_variable(cwRuntime* cw)
+static void cw_parse_variable(cwRuntime* cw, bool can_assign)
 {
     uint8_t arg = cw_identifier_constant(cw, &cw->previous);
-    cw_emit_bytes(cw, OP_GET_GLOBAL, arg);
+
+    if (can_assign && cw_match(cw, TOKEN_ASSIGN))
+    {
+        cw_parse_expression(cw);
+        cw_emit_bytes(cw, OP_SET_GLOBAL, arg);
+    }
+    else 
+    {
+        cw_emit_bytes(cw, OP_GET_GLOBAL, arg);
+    }
 }
 
 void cw_compiler_end(cwRuntime* cw)

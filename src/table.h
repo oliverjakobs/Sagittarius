@@ -11,9 +11,9 @@ typedef struct
 
 typedef struct
 {
-    uint32_t size;
-    uint32_t capacity;
     TableEntry* entries;
+    uint32_t capacity;
+    uint32_t size;
 } Table;
 
 void cw_table_init(Table* table);

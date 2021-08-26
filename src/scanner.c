@@ -29,14 +29,12 @@ static bool cw_match(cwRuntime* cw, char expected)
     return true;
 }
 
-static const char* cw_skip_whitespaces(const char* cursor, int* line)
+static const char* cw_skip_whitespaces(const char* cursor)
 {
     while (true)
     {
         switch (*cursor)
         {
-        case '\n':
-            *line++;
         case ' ': case '\t': case '\r':
             cursor++;
             break;
@@ -133,7 +131,7 @@ static Token cw_make_identifier(cwRuntime* cw)
 
 Token cw_scan_token(cwRuntime* cw)
 {
-    cw->cursor = cw_skip_whitespaces(cw->cursor, &cw->line);
+    cw->cursor = cw_skip_whitespaces(cw->cursor);
     cw->start = cw->cursor;
 
     if (cw_isend(cw)) return cw_make_token(cw, TOKEN_EOF);
@@ -166,6 +164,7 @@ Token cw_scan_token(cwRuntime* cw)
     case '<': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_LTEQ : TOKEN_LT); 
     case '>': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_GTEQ : TOKEN_GT);
     case '"': return cw_make_string(cw);
+    case '\n': cw->line++; return cw_make_token(cw, TOKEN_TERMINATOR);
     }
 
     return cw_make_error(cw, "Unexpected character.");
