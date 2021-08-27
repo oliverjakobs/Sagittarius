@@ -23,12 +23,7 @@ typedef enum
 } InterpretResult;
 
 struct cwRuntime
-{
-    /* scanner */
-    const char* start;
-    const char* cursor;
-    int line;
-    
+{    
     /* Parser */
     Chunk* chunk;
 

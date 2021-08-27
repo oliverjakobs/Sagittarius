@@ -29,9 +29,11 @@ static uint8_t cw_identifier_constant(cwRuntime* cw, Token* name)
 static void cw_advance(cwRuntime* cw)
 {
     cw->previous = cw->current;
+    const char* cursor = cw->previous.start + cw->previous.length;
+    int line = cw->previous.line + (cw->previous.type == TOKEN_TERMINATOR);
     while (true)
     {
-        cw->current = cw_scan_token(cw);
+        cursor = cw_scan_token(&cw->current, cursor, line);
         if (cw->current.type != TOKEN_ERROR) break;
 
         cw_syntax_error_at(cw, &cw->current, cw->current.start);

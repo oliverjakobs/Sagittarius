@@ -59,6 +59,6 @@ struct Token
 
 void cw_init_scanner(cwRuntime* cw, const char* src);
 
-Token cw_scan_token(cwRuntime* cw);
+const char* cw_scan_token(Token* token, const char* cursor, int line);
 
 #endif /* !CLOCKWORK_SCANNER_H */

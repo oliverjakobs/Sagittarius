@@ -3,143 +3,146 @@
 #include "runtime.h"
 
 #include <string.h>
-#include <stdio.h>
 
 void cw_init_scanner(cwRuntime* cw, const char* src)
 {
-    cw->start = src;
-    cw->cursor = src;
-    cw->line = 1;
+    cw->current.type = TOKEN_NULL;
+    cw->current.start = src;
+    cw->current.length = 0;
+    cw->current.line = 1;
 }
 
 static inline bool cw_isdigit(char c) { return c >= '0' && c <= '9'; }
 static inline bool cw_isalpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 
-static inline bool cw_isend(const cwRuntime* cw)     { return *cw->cursor == '\0'; }
-static inline char cw_peek(const cwRuntime* cw)      { return *cw->cursor; }
-static inline char cw_peek_next(const cwRuntime* cw) { return cw->cursor[1]; }
-static inline char cw_advance(cwRuntime* cw)         { cw->cursor++; return *(cw->cursor-1); }
-
-static inline int cw_cursor_offset(const cwRuntime* cw) { return cw->cursor - cw->start; }
-
-static bool cw_match(cwRuntime* cw, char expected)
-{
-    if (cw_isend(cw) || *cw->cursor != expected) return false;
-    cw->cursor++;
-    return true;
-}
-
 static const char* cw_skip_whitespaces(const char* cursor)
 {
-    while (true)
+    while (*cursor != '\0')
     {
         switch (*cursor)
         {
         case ' ': case '\t': case '\r':
             cursor++;
             break;
-        case '#':
+        case '#':   /* skip comments */
             while (*cursor != '\0' && *cursor != '\n') cursor++;
             break;
         default:
             return cursor;
         }
     }
+    return cursor;
 }
 
-static Token cw_make_token(const cwRuntime* cw, TokenType type)
+static const char* cw_make_token(Token* token, TokenType type, const char* start, int len, int line)
 {
-    Token token = { .type = type, .start = cw->start, .length = cw_cursor_offset(cw), .line = cw->line };
-    return token;
+    token->type = type;
+    token->start = start;
+    token->length = len;
+    token->line = line;
+    return start + len;
 }
 
-static Token cw_make_error(const cwRuntime* cw, const char* message)
+static const char* cw_make_double(Token* token, char c, TokenType type1, TokenType type2, const char* start, int line)
 {
-    Token token = { .type = TOKEN_ERROR, .start = message, .length = strlen(message), .line = cw->line };
-    return token;
+    if (start[1] == c) return cw_make_token(token, type1, start, 2, line);
+    return cw_make_token(token, type2, start, 1, line);
 }
 
-static Token cw_make_string(cwRuntime* cw)
+static const char* cw_make_error(Token* token, const char* cursor, int line, const char* message)
 {
-    while (cw_peek(cw) != '"')
+    token->type = TOKEN_ERROR;
+    token->start = message;
+    token->length = strlen(message);
+    token->line = line;
+    return cursor;
+}
+
+static const char* cw_make_string(Token* token, const char* start, int line)
+{
+    const char* cursor = start + 1;
+    while (*cursor != '"')
     {
-        if (cw_isend(cw)) return cw_make_error(cw, "Unterminated string.");
-        if (cw_peek(cw) == '\n') cw->line++;
-        cw_advance(cw);
+        if (*cursor == '\0' || *cursor == '\n') return cw_make_error(token, cursor, line, "Unterminated string.");
+        cursor++;
     }
 
-    cw_advance(cw); /* skip the closing quote */
-    return cw_make_token(cw, TOKEN_STRING);
+    cursor++; /* skip the closing quote */
+    return cw_make_token(token, TOKEN_STRING, start, cursor - start, line);
 }
 
-static Token cw_make_number(cwRuntime* cw)
+static const char* cw_make_number(Token* token, const char* start, int line)
 {
-    while (cw_isdigit(cw_peek(cw))) cw_advance(cw);
+    const char* cursor = start + 1;
+    while (cw_isdigit(*cursor)) cursor++;
 
     // Look for a fractional part.
-    if (cw_peek(cw) == '.' && cw_isdigit(cw_peek_next(cw)))
+    if (cursor[0] == '.' && cw_isdigit(cursor[1]))
     {
-        cw_advance(cw); /* Consume the ".". */
-        while (cw_isdigit(cw_peek(cw))) cw_advance(cw);
+        cursor++; /* Consume the ".". */
+        while (cw_isdigit(*cursor)) cursor++;
     }
-  
-    return cw_make_token(cw, TOKEN_NUMBER);
+
+    return cw_make_token(token, TOKEN_NUMBER, start, cursor - start, line);
 }
 
-static TokenType cw_check_keyword(cwRuntime* cw, int offset, int len, const char* rest, TokenType type)
+static TokenType cw_check_keyword(const char* name, int len, int offset, const char* rest, TokenType type)
 {
-    if (cw_cursor_offset(cw) == offset + len && memcmp(cw->start + offset, rest, len) == 0) return type;
+    int rest_len = strlen(rest);
+    if (len == offset + rest_len && memcmp(name + offset, rest, rest_len) == 0) return type;
     return TOKEN_IDENTIFIER;
 }
 
-static TokenType cw_identifier_type(cwRuntime* cw)
+static TokenType cw_identifier_type(const char* name, size_t len)
 {
-    switch (cw->start[0])
+    switch (name[0])
     {
-    case 'a': return cw_check_keyword(cw, 1, 2, "nd", TOKEN_AND);
-    case 'd': return cw_check_keyword(cw, 1, 7, "atatype", TOKEN_DATATYPE);
-    case 'e': return cw_check_keyword(cw, 1, 3, "lse", TOKEN_ELSE);
-    case 'i': return cw_check_keyword(cw, 1, 1, "f", TOKEN_IF);
+    case 'a': return cw_check_keyword(name, len, 1, "nd", TOKEN_AND);
+    case 'd': return cw_check_keyword(name, len, 1, "atatype", TOKEN_DATATYPE);
+    case 'e': return cw_check_keyword(name, len, 1, "lse", TOKEN_ELSE);
+    case 'i': return cw_check_keyword(name, len, 1, "f", TOKEN_IF);
     case 'f':
-        if (cw_cursor_offset(cw) > 1)
+        if (len > 1)
         {
-            switch (cw->start[1])
+            switch (name[1])
             {
-            case 'a': return cw_check_keyword(cw, 2, 3, "lse", TOKEN_FALSE);
-            case 'o': return cw_check_keyword(cw, 2, 1, "r", TOKEN_FOR);
-            case 'u': return cw_check_keyword(cw, 2, 6, "nction", TOKEN_FUNC);
+            case 'a': return cw_check_keyword(name, len, 2, "lse", TOKEN_FALSE);
+            case 'o': return cw_check_keyword(name, len, 2, "r", TOKEN_FOR);
+            case 'u': return cw_check_keyword(name, len, 2, "nction", TOKEN_FUNC);
             }
         }
         break;
-    case 'l': return cw_check_keyword(cw, 1, 2, "et", TOKEN_LET);
-    case 'n': return cw_check_keyword(cw, 1, 3, "ull", TOKEN_NULL);
-    case 'o': return cw_check_keyword(cw, 1, 1, "r", TOKEN_OR);
-    case 'p': return cw_check_keyword(cw, 1, 4, "rint", TOKEN_PRINT);
-    case 'r': return cw_check_keyword(cw, 1, 5, "eturn", TOKEN_RETURN);
-    case 't': return cw_check_keyword(cw, 1, 3, "rue", TOKEN_RETURN);
-    case 'w': return cw_check_keyword(cw, 1, 4, "hile", TOKEN_WHILE);
+    case 'l': return cw_check_keyword(name, len, 1, "et", TOKEN_LET);
+    case 'n': return cw_check_keyword(name, len, 1, "ull", TOKEN_NULL);
+    case 'o': return cw_check_keyword(name, len, 1, "r", TOKEN_OR);
+    case 'p': return cw_check_keyword(name, len, 1, "rint", TOKEN_PRINT);
+    case 'r': return cw_check_keyword(name, len, 1, "eturn", TOKEN_RETURN);
+    case 't': return cw_check_keyword(name, len, 1, "rue", TOKEN_RETURN);
+    case 'w': return cw_check_keyword(name, len, 1, "hile", TOKEN_WHILE);
     }
 
     return TOKEN_IDENTIFIER;
 }
 
-static Token cw_make_identifier(cwRuntime* cw)
+static const char* cw_make_identifier(Token* token, const char* start, int line)
 {
-    while (cw_isalpha(cw_peek(cw)) || cw_isdigit(cw_peek(cw))) cw_advance(cw);
-    return cw_make_token(cw, cw_identifier_type(cw));
+    const char* cursor = start + 1;
+    while (cw_isalpha(*cursor) || cw_isdigit(*cursor)) cursor++;
+    int len = cursor - start;
+    return cw_make_token(token, cw_identifier_type(start, len), start, len, line);
 }
 
-Token cw_scan_token(cwRuntime* cw)
+const char* cw_scan_token(Token* token, const char* cursor, int line)
 {
-    cw->cursor = cw_skip_whitespaces(cw->cursor);
-    cw->start = cw->cursor;
+    cursor = cw_skip_whitespaces(cursor);
+    const char* start = cursor;
 
-    if (cw_isend(cw)) return cw_make_token(cw, TOKEN_EOF);
-
-    switch (cw_advance(cw))
+    switch (*cursor)
     {
+    case '\0': return cw_make_token(token, TOKEN_EOF,        cursor, 0, line);
+    case '\n': return cw_make_token(token, TOKEN_TERMINATOR, cursor, 1, line);
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-        return cw_make_number(cw);
+        return cw_make_number(token, cursor, line);
     case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j':
     case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': case 's': case 't':
     case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
@@ -147,25 +150,23 @@ Token cw_scan_token(cwRuntime* cw)
     case 'K': case 'L': case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T':
     case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
     case '_':
-        return cw_make_identifier(cw);
-    case '(': return cw_make_token(cw, TOKEN_LPAREN);
-    case ')': return cw_make_token(cw, TOKEN_RPAREN);
-    case '{': return cw_make_token(cw, TOKEN_LBRACE);
-    case '}': return cw_make_token(cw, TOKEN_RBRACE);
-    case ';': return cw_make_token(cw, TOKEN_SEMICOLON);
-    case ',': return cw_make_token(cw, TOKEN_COMMA);
-    case '.': return cw_make_token(cw, TOKEN_PERIOD);
-    case '-': return cw_make_token(cw, TOKEN_MINUS);
-    case '+': return cw_make_token(cw, TOKEN_PLUS);
-    case '/': return cw_make_token(cw, TOKEN_SLASH);
-    case '*': return cw_make_token(cw, TOKEN_ASTERISK);
-    case '!': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_NOTEQ : TOKEN_EXCLAMATION);
-    case '=': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_EQ : TOKEN_ASSIGN);
-    case '<': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_LTEQ : TOKEN_LT); 
-    case '>': return cw_make_token(cw, cw_match(cw, '=') ? TOKEN_GTEQ : TOKEN_GT);
-    case '"': return cw_make_string(cw);
-    case '\n': cw->line++; return cw_make_token(cw, TOKEN_TERMINATOR);
+        return cw_make_identifier(token, cursor, line);
+    case '(': return cw_make_token(token, TOKEN_LPAREN,     cursor, 1, line);
+    case ')': return cw_make_token(token, TOKEN_RPAREN,     cursor, 1, line);
+    case '{': return cw_make_token(token, TOKEN_LBRACE,     cursor, 1, line);
+    case '}': return cw_make_token(token, TOKEN_RBRACE,     cursor, 1, line);
+    case ';': return cw_make_token(token, TOKEN_SEMICOLON,  cursor, 1, line);
+    case ',': return cw_make_token(token, TOKEN_COMMA,      cursor, 1, line);
+    case '.': return cw_make_token(token, TOKEN_PERIOD,     cursor, 1, line);
+    case '-': return cw_make_token(token, TOKEN_MINUS,      cursor, 1, line);
+    case '+': return cw_make_token(token, TOKEN_PLUS,       cursor, 1, line);
+    case '/': return cw_make_token(token, TOKEN_SLASH,      cursor, 1, line);
+    case '*': return cw_make_token(token, TOKEN_ASTERISK,   cursor, 1, line);
+    case '!': return cw_make_double(token, '=', TOKEN_NOTEQ, TOKEN_EXCLAMATION, cursor, line);
+    case '=': return cw_make_double(token, '=', TOKEN_EQ, TOKEN_ASSIGN, cursor, line);
+    case '<': return cw_make_double(token, '=', TOKEN_LTEQ, TOKEN_LT, cursor, line); 
+    case '>': return cw_make_double(token, '=', TOKEN_GTEQ, TOKEN_GT, cursor, line);
+    case '"': return cw_make_string(token, cursor, line);
+    default:  return cw_make_error(token, cursor, line, "Unexpected character.");
     }
-
-    return cw_make_error(cw, "Unexpected character.");
 }
