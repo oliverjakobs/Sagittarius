@@ -4,10 +4,12 @@
 #include "runtime.h"
 
 #include <string.h>
+#include <math.h>
 
 bool cw_is_falsey(Value val)
 {
-    return IS_NULL(val) || (IS_BOOL(val) && !AS_BOOL(val)) || (IS_NUMBER(val) && AS_NUMBER(val) == 0);
+    return IS_NULL(val) || (IS_BOOL(val) && !AS_BOOL(val)) 
+        || (IS_NUMBER(val) && (AS_INT(val) == 0 || fpclassify(AS_FLOAT(val)) == FP_ZERO));
 }
 
 bool cw_values_equal(Value a, Value b)
@@ -18,10 +20,12 @@ bool cw_values_equal(Value a, Value b)
         {
         case VAL_NULL:   return true;
         case VAL_BOOL:   return AS_BOOL(a) == AS_BOOL(b);
-        case VAL_NUMBER: return AS_NUMBER(a) == AS_NUMBER(b);
+        case VAL_INT:    return AS_INT(a) == AS_INT(b);
+        case VAL_FLOAT:  return AS_FLOAT(a) == AS_FLOAT(b);
         case VAL_OBJECT: return AS_OBJECT(a) == AS_OBJECT(b);
         }
-    } 
+    }
+
     return false;
 }
 

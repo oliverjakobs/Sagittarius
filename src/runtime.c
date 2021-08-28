@@ -28,17 +28,28 @@ static InterpretResult cw_run(cwRuntime* cw)
 {
 #define READ_BYTE()     (*cw->ip++)
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
-#define BINARY_OP(value_type, op)                                                   \
-    do {                                                                            \
-        if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))   \
-        {                                                                           \
-            cw_runtime_error(cw, "Operands must be numbers.");                      \
-            return INTERPRET_RUNTIME_ERROR;                                         \
-        }                                                                           \
-        double b = AS_NUMBER(cw_pop_stack(cw));                                     \
-        double a = AS_NUMBER(cw_pop_stack(cw));                                     \
-        cw_push_stack(cw, value_type(a op b));                                      \
-    } while (false)
+#define BINARY_OP_NUM(op) {                                                                         \
+        if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))                   \
+        {                                                                                           \
+            cw_runtime_error(cw, "Operands must be numbers.");                                      \
+            return INTERPRET_RUNTIME_ERROR;                                                         \
+        }                                                                                           \
+        Value b = cw_pop_stack(cw);                                                                 \
+        Value a = cw_pop_stack(cw);                                                                 \
+        if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) op AS_FLOAT(b)));  \
+        else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) op AS_INT(b)));        \
+    } break
+#define BINARY_OP_BOOL(op) {                                                                        \
+        if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))                   \
+        {                                                                                           \
+            cw_runtime_error(cw, "Operands must be numbers.");                                      \
+            return INTERPRET_RUNTIME_ERROR;                                                         \
+        }                                                                                           \
+        Value b = cw_pop_stack(cw);                                                                 \
+        Value a = cw_pop_stack(cw);                                                                 \
+        if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_BOOL(AS_FLOAT(a) op AS_FLOAT(b)));   \
+        else                            cw_push_stack(cw, MAKE_BOOL(AS_INT(a) op AS_INT(b)));       \
+    } break
 
     while (true)
     {
@@ -104,10 +115,10 @@ static InterpretResult cw_run(cwRuntime* cw)
                 cw_push_stack(cw, MAKE_BOOL((instruction == OP_EQ ? eq : !eq)));
                 break;
             }
-            case OP_LT:       BINARY_OP(MAKE_BOOL, <); break;
-            case OP_GT:       BINARY_OP(MAKE_BOOL, >); break;
-            case OP_LTEQ:     BINARY_OP(MAKE_BOOL, <=); break;
-            case OP_GTEQ:     BINARY_OP(MAKE_BOOL, >=); break;
+            case OP_LT:   BINARY_OP_BOOL(<);
+            case OP_GT:   BINARY_OP_BOOL(>);
+            case OP_LTEQ: BINARY_OP_BOOL(<=);
+            case OP_GTEQ: BINARY_OP_BOOL(>=);
             case OP_ADD:
             {
                 if (IS_STRING(cw_peek_stack(cw, 0)) && IS_STRING(cw_peek_stack(cw, 1)))
@@ -118,9 +129,10 @@ static InterpretResult cw_run(cwRuntime* cw)
                 }
                 else if (IS_NUMBER(cw_peek_stack(cw, 0)) && IS_NUMBER(cw_peek_stack(cw, 1)))
                 {
-                    double b = AS_NUMBER(cw_pop_stack(cw));
-                    double a = AS_NUMBER(cw_pop_stack(cw));
-                    cw_push_stack(cw, MAKE_NUMBER(a + b));
+                    Value b = cw_pop_stack(cw);
+                    Value a = cw_pop_stack(cw);
+                    if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) + AS_FLOAT(b)));
+                    else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) + AS_INT(b)));
                 }
                 else
                 {
@@ -129,18 +141,23 @@ static InterpretResult cw_run(cwRuntime* cw)
                 }
                 break;
             }
-            case OP_SUBTRACT: BINARY_OP(MAKE_NUMBER, -); break;
-            case OP_MULTIPLY: BINARY_OP(MAKE_NUMBER, *); break;
-            case OP_DIVIDE:   BINARY_OP(MAKE_NUMBER, /); break;
+            case OP_SUBTRACT: BINARY_OP_NUM(-);
+            case OP_MULTIPLY: BINARY_OP_NUM(*);
+            case OP_DIVIDE:   BINARY_OP_NUM(/);
             case OP_NOT:      cw_push_stack(cw, MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
-            case OP_NEGATE:   
+            case OP_NEGATE:
+            {
                 if (!IS_NUMBER(cw_peek_stack(cw, 0)))
                 {
                     cw_runtime_error(cw, "Operand must be a number.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                cw_push_stack(cw, MAKE_NUMBER(-AS_NUMBER(cw_pop_stack(cw))));
+                
+                Value val = cw_pop_stack(cw);
+                if (IS_FLOAT(val)) cw_push_stack(cw, MAKE_FLOAT(-AS_FLOAT(val)));
+                else               cw_push_stack(cw, MAKE_INT(-AS_INT(val)));
                 break;
+            }
             case OP_PRINT:
                 cw_print_value(cw_pop_stack(cw));
                 printf("\n");
@@ -150,7 +167,8 @@ static InterpretResult cw_run(cwRuntime* cw)
         }
     }
 
-#undef BINARY_OP
+#undef BINARY_OP_NUM
+#undef BINARY_OP_BOOL
 #undef READ_CONSTANT
 #undef READ_BYTE
 }

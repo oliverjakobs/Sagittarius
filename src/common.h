@@ -20,7 +20,8 @@ typedef enum
 {
     VAL_NULL = 0, 
     VAL_BOOL,
-    VAL_NUMBER,
+    VAL_INT,
+    VAL_FLOAT,
     VAL_OBJECT
 } ValueType;
 
@@ -30,23 +31,32 @@ typedef struct
     union
     {
         bool boolean;
-        double num;
+        int32_t ival;
+        float fval;
         Object* object;
     } as;
 } Value;
 
 #define IS_NULL(value)    ((value).type == VAL_NULL)
 #define IS_BOOL(value)    ((value).type == VAL_BOOL)
-#define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
+#define IS_INT(value)     ((value).type == VAL_INT)
+#define IS_FLOAT(value)   ((value).type == VAL_FLOAT)
+#define IS_NUMBER(value)  (cw_is_number(value))
 #define IS_OBJECT(value)  ((value).type == VAL_OBJECT)
 
+static inline bool cw_is_number(Value val) { return val.type > VAL_NULL && val.type <= VAL_FLOAT; }
+static inline int32_t cw_valtoi(Value val) { return IS_FLOAT(val) ? (int32_t)val.as.fval : val.as.ival; }
+static inline float   cw_valtof(Value val) { return IS_FLOAT(val) ? val.as.fval : (float)val.as.ival; }
+
 #define AS_BOOL(value)    ((value).as.boolean)
-#define AS_NUMBER(value)  ((value).as.num)
+#define AS_INT(value)     (cw_valtoi(value))
+#define AS_FLOAT(value)   (cw_valtof(value))
 #define AS_OBJECT(value)  ((value).as.object)
 
-#define MAKE_NULL(val)    ((Value){ .type = VAL_NULL,   { .num = 0 }})
+#define MAKE_NULL(val)    ((Value){ .type = VAL_NULL,   { .ival = 0 }})
 #define MAKE_BOOL(val)    ((Value){ .type = VAL_BOOL,   { .boolean = val }})
-#define MAKE_NUMBER(val)  ((Value){ .type = VAL_NUMBER, { .num = val }})
+#define MAKE_INT(val)     ((Value){ .type = VAL_INT,    { .ival = val }})
+#define MAKE_FLOAT(val)   ((Value){ .type = VAL_FLOAT,  { .fval = val }})
 #define MAKE_OBJECT(obj)  ((Value){ .type = VAL_OBJECT, { .object = (Object*)obj }})
 
 /* null, false and 0 are falsey and every other value behaves like true */

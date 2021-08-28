@@ -75,7 +75,8 @@ void cw_print_value(Value val)
     {
     case VAL_NULL:    printf("null"); break;
     case VAL_BOOL:    printf(AS_BOOL(val) ? "true" : "false"); break;
-    case VAL_NUMBER:  printf("%g", AS_NUMBER(val)); break;
+    case VAL_INT:     printf("%d", AS_INT(val)); break;
+    case VAL_FLOAT:   printf("%g", AS_FLOAT(val)); break;
     case VAL_OBJECT:  cw_print_object(val); break;
     }
 }
@@ -115,7 +116,7 @@ void cw_syntax_error_at(cwRuntime* cw, Token* token, const char* msg)
     if (token->type == TOKEN_EOF)
         fprintf(stderr, " at end");
     else if (token->type != TOKEN_ERROR)
-        fprintf(stderr, " at '%.*s'", token->length, token->start);
+        fprintf(stderr, " at '%.*s'", token->end - token->start, token->start);
 
     fprintf(stderr, ": %s\n", msg);
     cw->error = true;

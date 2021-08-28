@@ -22,14 +22,14 @@ static uint8_t cw_make_constant(cwRuntime* cw, Value value)
 
 static uint8_t cw_identifier_constant(cwRuntime* cw, Token* name)
 {
-    return cw_make_constant(cw, MAKE_OBJECT(cw_str_copy(cw, name->start, name->length)));
+    return cw_make_constant(cw, MAKE_OBJECT(cw_str_copy(cw, name->start, name->end - name->start)));
 }
 
 /* ----------------------------------| PARSING |--------------------------------------------- */
 static void cw_advance(cwRuntime* cw)
 {
     cw->previous = cw->current;
-    const char* cursor = cw->previous.start + cw->previous.length;
+    const char* cursor = cw->previous.end;
     int line = cw->previous.line + (cw->previous.type == TOKEN_TERMINATOR);
     while (true)
     {
@@ -49,6 +49,7 @@ static void cw_consume(cwRuntime* cw, TokenType type, const char* message)
 static void cw_consume_terminator(cwRuntime* cw, const char* message)
 {
     TokenType type = cw->current.type;
+    if (type == TOKEN_EOF) return; /* dont consume EOF */
     if (type == TOKEN_SEMICOLON || type == TOKEN_TERMINATOR)  cw_advance(cw);
     else                                                      cw_syntax_error_at(cw, &cw->current, message);
 }
@@ -63,6 +64,7 @@ static bool cw_match(cwRuntime* cw, TokenType type)
 static bool cw_match_terminator(cwRuntime* cw)
 {
     TokenType type = cw->current.type;
+    if (type == TOKEN_EOF) return true; /* dont consume EOF */
     if (type != TOKEN_SEMICOLON && type != TOKEN_TERMINATOR) return false;
 
     cw_advance(cw);
@@ -75,17 +77,17 @@ static void cw_parser_synchronize(cwRuntime* cw)
 
     while (cw->current.type != TOKEN_EOF)
     {
-        if (cw->previous.type == TOKEN_SEMICOLON) return;
+        if (cw->previous.type == TOKEN_SEMICOLON || cw->previous.type == TOKEN_TERMINATOR) return;
         switch (cw->current.type)
         {
-        case TOKEN_DATATYPE: 
-        case TOKEN_FUNC:
-        case TOKEN_LET:
+        case TOKEN_IF:
         case TOKEN_FOR:
         case TOKEN_WHILE:
-        case TOKEN_IF:
-        case TOKEN_PRINT:
+        case TOKEN_LET:
+        case TOKEN_FUNC:
+        case TOKEN_DATATYPE: 
         case TOKEN_RETURN:
+        case TOKEN_PRINT:
             return;
         }
 
@@ -93,7 +95,8 @@ static void cw_parser_synchronize(cwRuntime* cw)
     }
 }
 
-static void cw_parse_number(cwRuntime* cw, bool can_assign);
+static void cw_parse_integer(cwRuntime* cw, bool can_assign);
+static void cw_parse_float(cwRuntime* cw, bool can_assign);
 static void cw_parse_string(cwRuntime* cw, bool can_assign);
 static void cw_parse_grouping(cwRuntime* cw, bool can_assign);
 static void cw_parse_unary(cwRuntime* cw, bool can_assign);
@@ -119,12 +122,13 @@ ParseRule rules[] = {
     [TOKEN_NOTEQ]       = { NULL,               cw_parse_binary,    PREC_EQUALITY },
     [TOKEN_EQ]          = { NULL,               cw_parse_binary,    PREC_EQUALITY },
     [TOKEN_LT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
-    [TOKEN_GT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_LTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
+    [TOKEN_GT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_GTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
     [TOKEN_IDENTIFIER]  = { cw_parse_variable,  NULL,               PREC_NONE },
     [TOKEN_STRING]      = { cw_parse_string,    NULL,               PREC_NONE },
-    [TOKEN_NUMBER]      = { cw_parse_number,    NULL,               PREC_NONE },
+    [TOKEN_INTEGER]     = { cw_parse_integer,   NULL,               PREC_NONE },
+    [TOKEN_FLOAT]       = { cw_parse_float,     NULL,               PREC_NONE },
     [TOKEN_AND]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_DATATYPE]    = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
@@ -222,15 +226,21 @@ static void cw_parse_declaration(cwRuntime* cw)
     if (cw->panic) cw_parser_synchronize(cw);
 }
 
-static void cw_parse_number(cwRuntime* cw, bool can_assign)
+static void cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
-    double value = strtod(cw->previous.start, NULL);
-    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_NUMBER(value)));
+    int32_t value = strtol(cw->previous.start, NULL, 10);
+    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_INT(value)));
+}
+
+static void cw_parse_float(cwRuntime* cw, bool can_assign)
+{
+    float value = strtod(cw->previous.start, NULL);
+    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_FLOAT(value)));
 }
 
 static void cw_parse_string(cwRuntime* cw, bool can_assign)
 {
-    cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.length - 2);
+    cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.end - cw->previous.start - 2);
     cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)));
 }
 
@@ -263,8 +273,8 @@ static void cw_parse_binary(cwRuntime* cw, bool can_assign)
     case TOKEN_EQ:        cw_emit_byte(cw, OP_EQ); break;
     case TOKEN_NOTEQ:     cw_emit_byte(cw, OP_NOTEQ); break;
     case TOKEN_LT:        cw_emit_byte(cw, OP_LT); break;
-    case TOKEN_GT:        cw_emit_byte(cw, OP_GT); break;
     case TOKEN_LTEQ:      cw_emit_byte(cw, OP_LTEQ); break;
+    case TOKEN_GT:        cw_emit_byte(cw, OP_GT); break;
     case TOKEN_GTEQ:      cw_emit_byte(cw, OP_GTEQ); break;
     case TOKEN_PLUS:      cw_emit_byte(cw, OP_ADD); break;
     case TOKEN_MINUS:     cw_emit_byte(cw, OP_SUBTRACT); break;

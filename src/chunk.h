@@ -15,12 +15,9 @@ typedef enum
     OP_SET_GLOBAL,
     OP_GET_GLOBAL,
     /* comparison operations */
-    OP_EQ,
-    OP_NOTEQ,
-    OP_LT,
-    OP_GT,
-    OP_LTEQ,
-    OP_GTEQ,
+    OP_EQ, OP_NOTEQ,
+    OP_LT, OP_LTEQ,
+    OP_GT, OP_GTEQ,
     /* arithmetic operations */
     OP_ADD,
     OP_SUBTRACT,

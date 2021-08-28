@@ -6,8 +6,9 @@
 typedef enum
 {
     // Single-character tokens.
-    TOKEN_LPAREN, TOKEN_RPAREN,
-    TOKEN_LBRACE, TOKEN_RBRACE,
+    TOKEN_LPAREN,   TOKEN_RPAREN,
+    TOKEN_LBRACE,   TOKEN_RBRACE,
+    TOKEN_LBRACKET, TOKEN_RBRACKET,
     TOKEN_PERIOD,
     TOKEN_COMMA,
     TOKEN_COLON,
@@ -28,13 +29,14 @@ typedef enum
     // Literals.
     TOKEN_IDENTIFIER,
     TOKEN_STRING,
-    TOKEN_NUMBER,
+    TOKEN_INTEGER,
+    TOKEN_FLOAT,
     
     // Keywords.
     TOKEN_NULL,
     TOKEN_TRUE,
     TOKEN_FALSE,
-    TOKEN_AND, 
+    TOKEN_AND,
     TOKEN_OR,
     TOKEN_IF,
     TOKEN_ELSE,
@@ -53,7 +55,7 @@ struct Token
 {
   TokenType type;
   const char* start;
-  int length;
+  const char* end;
   int line;
 };
 

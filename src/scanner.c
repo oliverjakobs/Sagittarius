@@ -8,7 +8,7 @@ void cw_init_scanner(cwRuntime* cw, const char* src)
 {
     cw->current.type = TOKEN_NULL;
     cw->current.start = src;
-    cw->current.length = 0;
+    cw->current.end = src;
     cw->current.line = 1;
 }
 
@@ -34,115 +34,76 @@ static const char* cw_skip_whitespaces(const char* cursor)
     return cursor;
 }
 
-static const char* cw_make_token(Token* token, TokenType type, const char* start, int len, int line)
-{
-    token->type = type;
-    token->start = start;
-    token->length = len;
-    token->line = line;
-    return start + len;
-}
-
-static const char* cw_make_double(Token* token, char c, TokenType type1, TokenType type2, const char* start, int line)
-{
-    if (start[1] == c) return cw_make_token(token, type1, start, 2, line);
-    return cw_make_token(token, type2, start, 1, line);
-}
-
-static const char* cw_make_error(Token* token, const char* cursor, int line, const char* message)
-{
-    token->type = TOKEN_ERROR;
-    token->start = message;
-    token->length = strlen(message);
-    token->line = line;
-    return cursor;
-}
-
-static const char* cw_make_string(Token* token, const char* start, int line)
-{
-    const char* cursor = start + 1;
-    while (*cursor != '"')
-    {
-        if (*cursor == '\0' || *cursor == '\n') return cw_make_error(token, cursor, line, "Unterminated string.");
-        cursor++;
-    }
-
-    cursor++; /* skip the closing quote */
-    return cw_make_token(token, TOKEN_STRING, start, cursor - start, line);
-}
-
-static const char* cw_make_number(Token* token, const char* start, int line)
-{
-    const char* cursor = start + 1;
-    while (cw_isdigit(*cursor)) cursor++;
-
-    // Look for a fractional part.
-    if (cursor[0] == '.' && cw_isdigit(cursor[1]))
-    {
-        cursor++; /* Consume the ".". */
-        while (cw_isdigit(*cursor)) cursor++;
-    }
-
-    return cw_make_token(token, TOKEN_NUMBER, start, cursor - start, line);
-}
-
-static TokenType cw_check_keyword(const char* name, int len, int offset, const char* rest, TokenType type)
+static TokenType cw_check_keyword(const char* start, const char* stream, int offset, const char* rest, TokenType type)
 {
     int rest_len = strlen(rest);
-    if (len == offset + rest_len && memcmp(name + offset, rest, rest_len) == 0) return type;
+    if ((stream - start) == offset + rest_len && memcmp(start + offset, rest, rest_len) == 0) return type;
     return TOKEN_IDENTIFIER;
 }
 
-static TokenType cw_identifier_type(const char* name, size_t len)
+static TokenType cw_identifier_type(const char* start, const char* stream)
 {
-    switch (name[0])
+    switch (start[0])
     {
-    case 'a': return cw_check_keyword(name, len, 1, "nd", TOKEN_AND);
-    case 'd': return cw_check_keyword(name, len, 1, "atatype", TOKEN_DATATYPE);
-    case 'e': return cw_check_keyword(name, len, 1, "lse", TOKEN_ELSE);
-    case 'i': return cw_check_keyword(name, len, 1, "f", TOKEN_IF);
+    case 'a': return cw_check_keyword(start, stream, 1, "nd", TOKEN_AND);
+    case 'd': return cw_check_keyword(start, stream, 1, "atatype", TOKEN_DATATYPE);
+    case 'e': return cw_check_keyword(start, stream, 1, "lse", TOKEN_ELSE);
+    case 'i': return cw_check_keyword(start, stream, 1, "f", TOKEN_IF);
     case 'f':
-        if (len > 1)
+        if (stream - start > 1)
         {
-            switch (name[1])
+            switch (start[1])
             {
-            case 'a': return cw_check_keyword(name, len, 2, "lse", TOKEN_FALSE);
-            case 'o': return cw_check_keyword(name, len, 2, "r", TOKEN_FOR);
-            case 'u': return cw_check_keyword(name, len, 2, "nction", TOKEN_FUNC);
+            case 'a': return cw_check_keyword(start, stream, 2, "lse", TOKEN_FALSE);
+            case 'o': return cw_check_keyword(start, stream, 2, "r", TOKEN_FOR);
+            case 'u': return cw_check_keyword(start, stream, 2, "nction", TOKEN_FUNC);
             }
         }
         break;
-    case 'l': return cw_check_keyword(name, len, 1, "et", TOKEN_LET);
-    case 'n': return cw_check_keyword(name, len, 1, "ull", TOKEN_NULL);
-    case 'o': return cw_check_keyword(name, len, 1, "r", TOKEN_OR);
-    case 'p': return cw_check_keyword(name, len, 1, "rint", TOKEN_PRINT);
-    case 'r': return cw_check_keyword(name, len, 1, "eturn", TOKEN_RETURN);
-    case 't': return cw_check_keyword(name, len, 1, "rue", TOKEN_RETURN);
-    case 'w': return cw_check_keyword(name, len, 1, "hile", TOKEN_WHILE);
+    case 'l': return cw_check_keyword(start, stream, 1, "et", TOKEN_LET);
+    case 'n': return cw_check_keyword(start, stream, 1, "ull", TOKEN_NULL);
+    case 'o': return cw_check_keyword(start, stream, 1, "r", TOKEN_OR);
+    case 'p': return cw_check_keyword(start, stream, 1, "rint", TOKEN_PRINT);
+    case 'r': return cw_check_keyword(start, stream, 1, "eturn", TOKEN_RETURN);
+    case 't': return cw_check_keyword(start, stream, 1, "rue", TOKEN_RETURN);
+    case 'w': return cw_check_keyword(start, stream, 1, "hile", TOKEN_WHILE);
     }
 
     return TOKEN_IDENTIFIER;
-}
-
-static const char* cw_make_identifier(Token* token, const char* start, int line)
-{
-    const char* cursor = start + 1;
-    while (cw_isalpha(*cursor) || cw_isdigit(*cursor)) cursor++;
-    int len = cursor - start;
-    return cw_make_token(token, cw_identifier_type(start, len), start, len, line);
 }
 
 const char* cw_scan_token(Token* token, const char* cursor, int line)
 {
+#define CW_TOKEN_CASE1(c, t) case c: token->type = t; cursor++; break;
+#define CW_TOKEN_CASE2(c1, t1, c2, t2) case c1:         \
+    token->type = t1; cursor++;                         \
+    if (*cursor == c2) { token->type = t2; cursor++; }  \
+    break;
+    
     cursor = cw_skip_whitespaces(cursor);
-    const char* start = cursor;
+
+    token->line = line; 
+    token->start = cursor; 
 
     switch (*cursor)
     {
-    case '\0': return cw_make_token(token, TOKEN_EOF,        cursor, 0, line);
-    case '\n': return cw_make_token(token, TOKEN_TERMINATOR, cursor, 1, line);
+    case '\0': token->type = TOKEN_EOF; break;
+    CW_TOKEN_CASE1('\n', TOKEN_TERMINATOR);
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
-        return cw_make_number(token, cursor, line);
+    {
+        cursor++;
+        while (cw_isdigit(*cursor)) cursor++;
+        token->type = TOKEN_INTEGER;
+
+        // Look for a fractional part.
+        if (cursor[0] == '.' && cw_isdigit(cursor[1]))
+        {
+            cursor++; /* Consume the ".". */
+            while (cw_isdigit(*cursor)) cursor++;
+            token->type = TOKEN_FLOAT;
+        }
+        break;
+    }
     case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j':
     case 'k': case 'l': case 'm': case 'n': case 'o': case 'p': case 'q': case 'r': case 's': case 't':
     case 'u': case 'v': case 'w': case 'x': case 'y': case 'z':
@@ -150,23 +111,58 @@ const char* cw_scan_token(Token* token, const char* cursor, int line)
     case 'K': case 'L': case 'M': case 'N': case 'O': case 'P': case 'Q': case 'R': case 'S': case 'T':
     case 'U': case 'V': case 'W': case 'X': case 'Y': case 'Z':
     case '_':
-        return cw_make_identifier(token, cursor, line);
-    case '(': return cw_make_token(token, TOKEN_LPAREN,     cursor, 1, line);
-    case ')': return cw_make_token(token, TOKEN_RPAREN,     cursor, 1, line);
-    case '{': return cw_make_token(token, TOKEN_LBRACE,     cursor, 1, line);
-    case '}': return cw_make_token(token, TOKEN_RBRACE,     cursor, 1, line);
-    case ';': return cw_make_token(token, TOKEN_SEMICOLON,  cursor, 1, line);
-    case ',': return cw_make_token(token, TOKEN_COMMA,      cursor, 1, line);
-    case '.': return cw_make_token(token, TOKEN_PERIOD,     cursor, 1, line);
-    case '-': return cw_make_token(token, TOKEN_MINUS,      cursor, 1, line);
-    case '+': return cw_make_token(token, TOKEN_PLUS,       cursor, 1, line);
-    case '/': return cw_make_token(token, TOKEN_SLASH,      cursor, 1, line);
-    case '*': return cw_make_token(token, TOKEN_ASTERISK,   cursor, 1, line);
-    case '!': return cw_make_double(token, '=', TOKEN_NOTEQ, TOKEN_EXCLAMATION, cursor, line);
-    case '=': return cw_make_double(token, '=', TOKEN_EQ, TOKEN_ASSIGN, cursor, line);
-    case '<': return cw_make_double(token, '=', TOKEN_LTEQ, TOKEN_LT, cursor, line); 
-    case '>': return cw_make_double(token, '=', TOKEN_GTEQ, TOKEN_GT, cursor, line);
-    case '"': return cw_make_string(token, cursor, line);
-    default:  return cw_make_error(token, cursor, line, "Unexpected character.");
+    {
+        cursor++;
+        while (cw_isalpha(*cursor) || cw_isdigit(*cursor)) cursor++;
+        token->type = cw_identifier_type(token->start, cursor);
+        break;
     }
+    case '"':
+    {
+        cursor++; /* skip the opening quote */
+        while (*cursor != '"')
+        {
+            if (*cursor == '\0' || *cursor == '\n')
+            {
+                token->type = TOKEN_ERROR;
+                token->start = "Unterminated string.";
+                break;
+            }
+            cursor++;
+        }
+        cursor++; /* skip the closing quote */
+
+        token->type = TOKEN_STRING;
+        break;
+    }
+    /* single character token */
+    CW_TOKEN_CASE1('(', TOKEN_LPAREN)
+    CW_TOKEN_CASE1(')', TOKEN_RPAREN)
+    CW_TOKEN_CASE1('{', TOKEN_LBRACE)
+    CW_TOKEN_CASE1('}', TOKEN_RBRACE)
+    CW_TOKEN_CASE1('[', TOKEN_LBRACKET)
+    CW_TOKEN_CASE1(']', TOKEN_RBRACKET)
+    CW_TOKEN_CASE1(';', TOKEN_SEMICOLON)
+    CW_TOKEN_CASE1(',', TOKEN_COMMA)
+    CW_TOKEN_CASE1('.', TOKEN_PERIOD)
+    CW_TOKEN_CASE1('-', TOKEN_MINUS)
+    CW_TOKEN_CASE1('+', TOKEN_PLUS)
+    CW_TOKEN_CASE1('/', TOKEN_SLASH)
+    CW_TOKEN_CASE1('*', TOKEN_ASTERISK)
+    /* potential double character token */
+    CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION, '=', TOKEN_NOTEQ)
+    CW_TOKEN_CASE2('=', TOKEN_ASSIGN, '=', TOKEN_EQ)
+    CW_TOKEN_CASE2('<', TOKEN_LT, '=', TOKEN_LTEQ)
+    CW_TOKEN_CASE2('>', TOKEN_GT, '=', TOKEN_GTEQ)
+    default:
+        token->type = TOKEN_ERROR;
+        token->start = "Unexpected character.";
+        break;
+    }
+
+    token->end = cursor;
+    return cursor;
+
+#undef CW_TOKEN_CASE1
+#undef CW_TOKEN_CASE2
 }
