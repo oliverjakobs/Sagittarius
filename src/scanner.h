@@ -5,6 +5,7 @@
 
 typedef enum
 {
+    TOKEN_EOF = 0,
     // Single-character tokens.
     TOKEN_LPAREN,   TOKEN_RPAREN,
     TOKEN_LBRACE,   TOKEN_RBRACE,
@@ -46,21 +47,30 @@ typedef enum
     TOKEN_FUNC,
     TOKEN_DATATYPE,
     TOKEN_RETURN,
-    TOKEN_PRINT,
-
-    TOKEN_ERROR, TOKEN_EOF
+    TOKEN_PRINT
 } TokenType;
+
+typedef enum
+{
+    TOKENMOD_NONE = 0,
+    TOKENMOD_BIN,
+    TOKENMOD_OCT,
+    TOKENMOD_HEX,
+} TokenMod;
 
 struct Token
 {
-  TokenType type;
-  const char* start;
-  const char* end;
-  int line;
+    TokenType type;
+    TokenMod mod;
+    const char* start;
+    const char* end;
+    int line;
 };
 
 void cw_init_scanner(cwRuntime* cw, const char* src);
 
-const char* cw_scan_token(Token* token, const char* cursor, int line);
+const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int line);
+
+int cw_token_get_base(const Token* token);
 
 #endif /* !CLOCKWORK_SCANNER_H */

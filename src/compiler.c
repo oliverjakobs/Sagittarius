@@ -13,7 +13,7 @@ static uint8_t cw_make_constant(cwRuntime* cw, Value value)
     int constant = cw_chunk_add_constant(cw->chunk, value);
     if (constant > UINT8_MAX)
     {
-        cw_syntax_error(cw, "Too many constants in one chunk.");
+        cw_syntax_error_at(cw, &cw->previous, "Too many constants in one chunk.");
         return 0;
     }
 
@@ -33,10 +33,8 @@ static void cw_advance(cwRuntime* cw)
     int line = cw->previous.line + (cw->previous.type == TOKEN_TERMINATOR);
     while (true)
     {
-        cursor = cw_scan_token(&cw->current, cursor, line);
-        if (cw->current.type != TOKEN_ERROR) break;
-
-        cw_syntax_error_at(cw, &cw->current, cw->current.start);
+        cursor = cw_scan_token(cw, &cw->current, cursor, line);
+        if (!cw->error) break;
     }
 }
 
@@ -105,6 +103,7 @@ static void cw_parse_literal(cwRuntime* cw, bool can_assign);
 static void cw_parse_variable(cwRuntime* cw, bool can_assign);
 
 ParseRule rules[] = {
+    [TOKEN_EOF]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,               PREC_NONE },
     [TOKEN_RPAREN]      = { NULL,               NULL,               PREC_NONE },
     [TOKEN_LBRACE]      = { NULL,               NULL,               PREC_NONE }, 
@@ -143,8 +142,6 @@ ParseRule rules[] = {
     [TOKEN_TRUE]        = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_LET]         = { NULL,               NULL,               PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_ERROR]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_EOF]         = { NULL,               NULL,               PREC_NONE },
 };
 
 static ParseRule* cw_get_parserule(TokenType type) { return &rules[type]; }
@@ -156,7 +153,7 @@ static void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 
     if (!prefix_rule)
     {
-        cw_syntax_error(cw, "Expect expression");
+        cw_syntax_error_at(cw, &cw->previous, "Expect expression");
         return;
     }
 
@@ -172,7 +169,7 @@ static void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 
     if (can_assign && cw_match(cw, TOKEN_ASSIGN))
     {
-        cw_syntax_error(cw, "Invalid assignment target.");
+        cw_syntax_error_at(cw, &cw->previous, "Invalid assignment target.");
     }
 }
 
@@ -209,7 +206,7 @@ static void cw_var_decl(cwRuntime* cw)
 
     /* parse variable initialization value */
     if (cw_match(cw, TOKEN_ASSIGN)) cw_parse_expression(cw);
-    else                            cw_syntax_error(cw, "Undefined variable.");
+    else                            cw_syntax_error_at(cw, &cw->previous, "Undefined variable.");
 
     /* define variable */
     cw_consume_terminator(cw, "Expect terminator after var declaration.");
@@ -228,7 +225,7 @@ static void cw_parse_declaration(cwRuntime* cw)
 
 static void cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
-    int32_t value = strtol(cw->previous.start, NULL, 10);
+    int32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
     cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_INT(value)));
 }
 

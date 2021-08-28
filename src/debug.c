@@ -89,11 +89,11 @@ void cw_print_object(Value val)
     }
 }
 
-void cw_runtime_error(cwRuntime* cw, const char* format, ...)
+void cw_runtime_error(cwRuntime* cw, const char* fmt, ...)
 {
     va_list args;
-    va_start(args, format);
-    vfprintf(stderr, format, args);
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
     va_end(args);
     fputs("\n", stderr);
 
@@ -104,18 +104,32 @@ void cw_runtime_error(cwRuntime* cw, const char* format, ...)
 }
 
 
-void cw_syntax_error(cwRuntime* cw, const char* msg) { cw_syntax_error_at(cw, &cw->previous, msg); }
+void cw_syntax_error(cwRuntime* cw, int line, const char* fmt, ...)
+{
+    if (cw->panic) return;
+    cw->panic = true;
+
+    fprintf(stderr, "[line %d] Syntax error: ", line);
+
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, fmt, args);
+    va_end(args);
+    fputs("\n", stderr);
+
+    cw->error = true;
+}
 
 void cw_syntax_error_at(cwRuntime* cw, Token* token, const char* msg)
 {
     if (cw->panic) return;
     cw->panic = true;
 
-    fprintf(stderr, "[line %d] Error", token->line);
+    fprintf(stderr, "[line %d] Syntax error", token->line);
 
     if (token->type == TOKEN_EOF)
         fprintf(stderr, " at end");
-    else if (token->type != TOKEN_ERROR)
+    else
         fprintf(stderr, " at '%.*s'", token->end - token->start, token->start);
 
     fprintf(stderr, ": %s\n", msg);

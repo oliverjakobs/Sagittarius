@@ -1,5 +1,6 @@
 #include "scanner.h"
 
+#include "debug.h"
 #include "runtime.h"
 
 #include <string.h>
@@ -72,7 +73,7 @@ static TokenType cw_identifier_type(const char* start, const char* stream)
     return TOKEN_IDENTIFIER;
 }
 
-const char* cw_scan_token(Token* token, const char* cursor, int line)
+const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int line)
 {
 #define CW_TOKEN_CASE1(c, t) case c: token->type = t; cursor++; break;
 #define CW_TOKEN_CASE2(c1, t1, c2, t2) case c1:         \
@@ -82,7 +83,8 @@ const char* cw_scan_token(Token* token, const char* cursor, int line)
     
     cursor = cw_skip_whitespaces(cursor);
 
-    token->line = line; 
+    token->mod = TOKENMOD_NONE;
+    token->line = line;
     token->start = cursor; 
 
     switch (*cursor)
@@ -124,9 +126,8 @@ const char* cw_scan_token(Token* token, const char* cursor, int line)
         {
             if (*cursor == '\0' || *cursor == '\n')
             {
-                token->type = TOKEN_ERROR;
-                token->start = "Unterminated string.";
-                break;
+                cw_syntax_error(cw, line, "Unterminated string.");
+                return cursor;
             }
             cursor++;
         }
@@ -155,9 +156,8 @@ const char* cw_scan_token(Token* token, const char* cursor, int line)
     CW_TOKEN_CASE2('<', TOKEN_LT, '=', TOKEN_LTEQ)
     CW_TOKEN_CASE2('>', TOKEN_GT, '=', TOKEN_GTEQ)
     default:
-        token->type = TOKEN_ERROR;
-        token->start = "Unexpected character.";
-        break;
+        cw_syntax_error(cw, line, "Unexpected character.");
+        return ++cursor;
     }
 
     token->end = cursor;
@@ -165,4 +165,15 @@ const char* cw_scan_token(Token* token, const char* cursor, int line)
 
 #undef CW_TOKEN_CASE1
 #undef CW_TOKEN_CASE2
+}
+
+int cw_token_get_base(const Token* token)
+{
+    switch (token->mod)
+    {
+    case TOKENMOD_BIN: return 2;
+    case TOKENMOD_OCT: return 8;
+    case TOKENMOD_HEX: return 16;
+    default:           return 10;
+    }
 }
