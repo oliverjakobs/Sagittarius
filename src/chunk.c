@@ -3,7 +3,7 @@
 #include "memory.h"
 #include "runtime.h"
 
-void cw_chunk_init(Chunk* chunk)
+void cw_chunk_init(cwChunk* chunk)
 {
     chunk->bytes = NULL;
     chunk->lines = NULL;
@@ -14,15 +14,15 @@ void cw_chunk_init(Chunk* chunk)
     chunk->const_cap = 0;
 }
 
-void cw_chunk_free(Chunk* chunk)
+void cw_chunk_free(cwChunk* chunk)
 {
     CW_FREE_ARRAY(uint8_t, chunk->bytes, chunk->cap);
     CW_FREE_ARRAY(int, chunk->lines, chunk->cap);
-    CW_FREE_ARRAY(Value, chunk->constants, chunk->const_cap);
+    CW_FREE_ARRAY(cwValue, chunk->constants, chunk->const_cap);
     cw_chunk_init(chunk);
 }
 
-void cw_chunk_write(Chunk* chunk, uint8_t byte, int line)
+void cw_chunk_write(cwChunk* chunk, uint8_t byte, int line)
 {
     if (chunk->cap < chunk->len + 1)
     {
@@ -37,13 +37,13 @@ void cw_chunk_write(Chunk* chunk, uint8_t byte, int line)
     chunk->len++;
 }
 
-int cw_chunk_add_constant(Chunk* chunk, Value val)
+int cw_chunk_add_constant(cwChunk* chunk, cwValue val)
 {
     if (chunk->const_cap < chunk->const_len + 1)
     {
         int old_cap = chunk->const_cap;
         chunk->const_cap = CW_GROW_CAPACITY(old_cap);
-        chunk->constants = CW_GROW_ARRAY(Value, chunk->constants, old_cap, chunk->const_cap);
+        chunk->constants = CW_GROW_ARRAY(cwValue, chunk->constants, old_cap, chunk->const_cap);
     }
 
     chunk->constants[chunk->const_len] = val;

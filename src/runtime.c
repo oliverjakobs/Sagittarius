@@ -34,8 +34,8 @@ static InterpretResult cw_run(cwRuntime* cw)
             cw_runtime_error(cw, "Operands must be numbers.");                                      \
             return INTERPRET_RUNTIME_ERROR;                                                         \
         }                                                                                           \
-        Value b = cw_pop_stack(cw);                                                                 \
-        Value a = cw_pop_stack(cw);                                                                 \
+        cwValue b = cw_pop_stack(cw);                                                               \
+        cwValue a = cw_pop_stack(cw);                                                               \
         if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) op AS_FLOAT(b)));  \
         else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) op AS_INT(b)));        \
     } break
@@ -45,8 +45,8 @@ static InterpretResult cw_run(cwRuntime* cw)
             cw_runtime_error(cw, "Operands must be numbers.");                                      \
             return INTERPRET_RUNTIME_ERROR;                                                         \
         }                                                                                           \
-        Value b = cw_pop_stack(cw);                                                                 \
-        Value a = cw_pop_stack(cw);                                                                 \
+        cwValue b = cw_pop_stack(cw);                                                               \
+        cwValue a = cw_pop_stack(cw);                                                               \
         if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_BOOL(AS_FLOAT(a) op AS_FLOAT(b)));   \
         else                            cw_push_stack(cw, MAKE_BOOL(AS_INT(a) op AS_INT(b)));       \
     } break
@@ -55,7 +55,7 @@ static InterpretResult cw_run(cwRuntime* cw)
     {
 #ifdef DEBUG_TRACE_EXECUTION
         printf("          ");
-        for (Value* slot = cw->stack; slot < cw->stack + cw->stack_index; ++slot)
+        for (cwValue* slot = cw->stack; slot < cw->stack + cw->stack_index; ++slot)
         {
             printf("[ ");
             cw_print_value(*slot);
@@ -69,7 +69,7 @@ static InterpretResult cw_run(cwRuntime* cw)
         {
             case OP_CONSTANT:
             {
-                Value constant = READ_CONSTANT();
+                cwValue constant = READ_CONSTANT();
                 cw_push_stack(cw, constant);
                 break;
             }
@@ -98,7 +98,7 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_GET_GLOBAL:
             {
                 cwString* name = AS_STRING(READ_CONSTANT());
-                Value value;
+                cwValue value;
                 if (!cw_table_find(&cw->globals, name, &value))
                 {
                     cw_runtime_error(cw, "Undefined variable '%s'.", name->raw);
@@ -109,8 +109,8 @@ static InterpretResult cw_run(cwRuntime* cw)
             }
             case OP_EQ: case OP_NOTEQ:
             {
-                Value b = cw_pop_stack(cw);
-                Value a = cw_pop_stack(cw);
+                cwValue b = cw_pop_stack(cw);
+                cwValue a = cw_pop_stack(cw);
                 bool eq = cw_values_equal(a, b);
                 cw_push_stack(cw, MAKE_BOOL((instruction == OP_EQ ? eq : !eq)));
                 break;
@@ -129,8 +129,8 @@ static InterpretResult cw_run(cwRuntime* cw)
                 }
                 else if (IS_NUMBER(cw_peek_stack(cw, 0)) && IS_NUMBER(cw_peek_stack(cw, 1)))
                 {
-                    Value b = cw_pop_stack(cw);
-                    Value a = cw_pop_stack(cw);
+                    cwValue b = cw_pop_stack(cw);
+                    cwValue a = cw_pop_stack(cw);
                     if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) + AS_FLOAT(b)));
                     else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) + AS_INT(b)));
                 }
@@ -153,7 +153,7 @@ static InterpretResult cw_run(cwRuntime* cw)
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 
-                Value val = cw_pop_stack(cw);
+                cwValue val = cw_pop_stack(cw);
                 if (IS_FLOAT(val)) cw_push_stack(cw, MAKE_FLOAT(-AS_FLOAT(val)));
                 else               cw_push_stack(cw, MAKE_INT(-AS_INT(val)));
                 break;
@@ -175,7 +175,7 @@ static InterpretResult cw_run(cwRuntime* cw)
 
 InterpretResult cw_interpret(cwRuntime* cw, const char* src)
 {
-    Chunk chunk;
+    cwChunk chunk;
     cw_chunk_init(&chunk);
 
     InterpretResult result = INTERPRET_COMPILE_ERROR;
@@ -192,7 +192,7 @@ InterpretResult cw_interpret(cwRuntime* cw, const char* src)
 }
 
 /* stack operations */
-void  cw_push_stack(cwRuntime* cw, Value val)
+void  cw_push_stack(cwRuntime* cw, cwValue val)
 {
     if (cw->stack_index >= CW_STACK_MAX)
     {
@@ -203,17 +203,6 @@ void  cw_push_stack(cwRuntime* cw, Value val)
     cw->stack[cw->stack_index++] = val;
 }
 
-Value cw_pop_stack(cwRuntime* cw)
-{
-    return cw->stack[--cw->stack_index];
-}
-
-void cw_reset_stack(cwRuntime* cw)
-{
-    cw->stack_index = 0;
-}
-
-Value cw_peek_stack(cwRuntime* cw, int distance)
-{
-    return cw->stack[cw->stack_index - 1 -distance];
-}
+cwValue cw_pop_stack(cwRuntime* cw)         { return cw->stack[--cw->stack_index]; }
+void    cw_reset_stack(cwRuntime* cw)       { cw->stack_index = 0; }
+cwValue cw_peek_stack(cwRuntime* cw, int d) { return cw->stack[cw->stack_index - 1 - d]; }

@@ -8,7 +8,7 @@
 
 #include "debug.h"
 
-static uint8_t cw_make_constant(cwRuntime* cw, Value value)
+static uint8_t cw_make_constant(cwRuntime* cw, cwValue value)
 {
     int constant = cw_chunk_add_constant(cw->chunk, value);
     if (constant > UINT8_MAX)
@@ -20,7 +20,7 @@ static uint8_t cw_make_constant(cwRuntime* cw, Value value)
     return (uint8_t)constant;
 }
 
-static uint8_t cw_identifier_constant(cwRuntime* cw, Token* name)
+static uint8_t cw_identifier_constant(cwRuntime* cw, cwToken* name)
 {
     return cw_make_constant(cw, MAKE_OBJECT(cw_str_copy(cw, name->start, name->end - name->start)));
 }
@@ -38,7 +38,7 @@ static void cw_advance(cwRuntime* cw)
     }
 }
 
-static void cw_consume(cwRuntime* cw, TokenType type, const char* message)
+static void cw_consume(cwRuntime* cw, cwTokenType type, const char* message)
 {
     if (cw->current.type == type)   cw_advance(cw);
     else                            cw_syntax_error_at(cw, &cw->current, message);
@@ -46,13 +46,13 @@ static void cw_consume(cwRuntime* cw, TokenType type, const char* message)
 
 static void cw_consume_terminator(cwRuntime* cw, const char* message)
 {
-    TokenType type = cw->current.type;
+    cwTokenType type = cw->current.type;
     if (type == TOKEN_EOF) return; /* dont consume EOF */
     if (type == TOKEN_SEMICOLON || type == TOKEN_TERMINATOR)  cw_advance(cw);
     else                                                      cw_syntax_error_at(cw, &cw->current, message);
 }
 
-static bool cw_match(cwRuntime* cw, TokenType type)
+static bool cw_match(cwRuntime* cw, cwTokenType type)
 {
     if (cw->current.type != type) return false;
     cw_advance(cw);
@@ -61,7 +61,7 @@ static bool cw_match(cwRuntime* cw, TokenType type)
 
 static bool cw_match_terminator(cwRuntime* cw)
 {
-    TokenType type = cw->current.type;
+    cwTokenType type = cw->current.type;
     if (type == TOKEN_EOF) return true; /* dont consume EOF */
     if (type != TOKEN_SEMICOLON && type != TOKEN_TERMINATOR) return false;
 
@@ -144,7 +144,7 @@ ParseRule rules[] = {
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
 };
 
-static ParseRule* cw_get_parserule(TokenType type) { return &rules[type]; }
+static ParseRule* cw_get_parserule(cwTokenType type) { return &rules[type]; }
 
 static void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 {
@@ -249,7 +249,7 @@ static void cw_parse_grouping(cwRuntime* cw, bool can_assign)
 
 static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 {
-    TokenType operator = cw->previous.type;
+    cwTokenType operator = cw->previous.type;
     cw_parse_precedence(cw, PREC_UNARY);
 
     switch (operator)
@@ -261,7 +261,7 @@ static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 
 static void cw_parse_binary(cwRuntime* cw, bool can_assign)
 {
-    TokenType operator = cw->previous.type;
+    cwTokenType operator = cw->previous.type;
     ParseRule* rule = cw_get_parserule(operator);
     cw_parse_precedence(cw, (Precedence)(rule->precedence + 1));
 
@@ -316,7 +316,7 @@ void cw_compiler_end(cwRuntime* cw)
 #endif 
 }
 
-bool cw_compile(cwRuntime* cw, const char* src, Chunk* chunk)
+bool cw_compile(cwRuntime* cw, const char* src, cwChunk* chunk)
 {
     cw_init_scanner(cw, src);
 

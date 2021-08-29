@@ -35,14 +35,14 @@ static const char* cw_skip_whitespaces(const char* cursor)
     return cursor;
 }
 
-static TokenType cw_check_keyword(const char* start, const char* stream, int offset, const char* rest, TokenType type)
+static cwTokenType cw_check_keyword(const char* start, const char* stream, int offset, const char* rest, cwTokenType type)
 {
     int rest_len = strlen(rest);
     if ((stream - start) == offset + rest_len && memcmp(start + offset, rest, rest_len) == 0) return type;
     return TOKEN_IDENTIFIER;
 }
 
-static TokenType cw_identifier_type(const char* start, const char* stream)
+static cwTokenType cw_identifier_type(const char* start, const char* stream)
 {
     switch (start[0])
     {
@@ -73,7 +73,7 @@ static TokenType cw_identifier_type(const char* start, const char* stream)
     return TOKEN_IDENTIFIER;
 }
 
-const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int line)
+const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line)
 {
 #define CW_TOKEN_CASE1(c, t) case c: token->type = t; cursor++; break;
 #define CW_TOKEN_CASE2(c1, t1, c2, t2) case c1:         \
@@ -151,10 +151,10 @@ const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int l
     CW_TOKEN_CASE1('/', TOKEN_SLASH)
     CW_TOKEN_CASE1('*', TOKEN_ASTERISK)
     /* potential double character token */
-    CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION, '=', TOKEN_NOTEQ)
-    CW_TOKEN_CASE2('=', TOKEN_ASSIGN, '=', TOKEN_EQ)
-    CW_TOKEN_CASE2('<', TOKEN_LT, '=', TOKEN_LTEQ)
-    CW_TOKEN_CASE2('>', TOKEN_GT, '=', TOKEN_GTEQ)
+    CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION,  '=', TOKEN_NOTEQ)
+    CW_TOKEN_CASE2('=', TOKEN_ASSIGN,       '=', TOKEN_EQ)
+    CW_TOKEN_CASE2('<', TOKEN_LT,           '=', TOKEN_LTEQ)
+    CW_TOKEN_CASE2('>', TOKEN_GT,           '=', TOKEN_GTEQ)
     default:
         cw_syntax_error(cw, line, "Unexpected character.");
         return ++cursor;
@@ -167,7 +167,7 @@ const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int l
 #undef CW_TOKEN_CASE2
 }
 
-int cw_token_get_base(const Token* token)
+int cw_token_get_base(const cwToken* token)
 {
     switch (token->mod)
     {

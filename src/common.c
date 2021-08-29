@@ -6,13 +6,13 @@
 #include <string.h>
 #include <math.h>
 
-bool cw_is_falsey(Value val)
+bool cw_is_falsey(cwValue val)
 {
     return IS_NULL(val) || (IS_BOOL(val) && !AS_BOOL(val)) 
         || (IS_NUMBER(val) && (AS_INT(val) == 0 || fpclassify(AS_FLOAT(val)) == FP_ZERO));
 }
 
-bool cw_values_equal(Value a, Value b)
+bool cw_values_equal(cwValue a, cwValue b)
 {
     if (a.type == b.type)
     {
@@ -31,16 +31,16 @@ bool cw_values_equal(Value a, Value b)
 
 
 /* objects */
-static Object* cw_object_alloc(cwRuntime* cw, size_t size, ObjectType type)
+static cwObject* cw_object_alloc(cwRuntime* cw, size_t size, cwObjectType type)
 {
-    Object* object = cw_reallocate(NULL, 0, size);
+    cwObject* object = cw_reallocate(NULL, 0, size);
     object->type = type;
     object->next = cw->objects;
     cw->objects = object;
     return object;
 }
 
-static void cw_object_free(Object* object)
+static void cw_object_free(cwObject* object)
 {
     switch (object->type)
     {
@@ -56,10 +56,10 @@ static void cw_object_free(Object* object)
 
 void cw_free_objects(cwRuntime* cw)
 {
-    Object* object = cw->objects;
+    cwObject* object = cw->objects;
     while (object != NULL)
     {
-        Object* next = object->next;
+        cwObject* next = object->next;
         cw_object_free(object);
         object = next;
     }

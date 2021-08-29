@@ -48,7 +48,7 @@ typedef enum
     TOKEN_DATATYPE,
     TOKEN_RETURN,
     TOKEN_PRINT
-} TokenType;
+} cwTokenType;
 
 typedef enum
 {
@@ -56,12 +56,12 @@ typedef enum
     TOKENMOD_BIN,
     TOKENMOD_OCT,
     TOKENMOD_HEX,
-} TokenMod;
+} cwTokenMod;
 
-struct Token
+struct cwToken
 {
-    TokenType type;
-    TokenMod mod;
+    cwTokenType type;
+    cwTokenMod mod;
     const char* start;
     const char* end;
     int line;
@@ -69,8 +69,8 @@ struct Token
 
 void cw_init_scanner(cwRuntime* cw, const char* src);
 
-const char* cw_scan_token(cwRuntime* cw, Token* token, const char* cursor, int line);
+const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line);
 
-int cw_token_get_base(const Token* token);
+int cw_token_get_base(const cwToken* token);
 
 #endif /* !CLOCKWORK_SCANNER_H */

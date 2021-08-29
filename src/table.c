@@ -67,7 +67,7 @@ static void cw_table_grow(Table* table, int capacity)
     table->capacity = capacity;
 }
 
-bool cw_table_insert(Table* table, cwString* key, Value val)
+bool cw_table_insert(Table* table, cwString* key, cwValue val)
 {
     if (table->size + 1 > table->capacity * CW_TABLE_MAX_LOAD)
     {
@@ -97,7 +97,7 @@ bool cw_table_remove(Table* table, cwString* key)
     return true;
 }
 
-bool cw_table_find(const Table* table, const cwString* key, Value* val)
+bool cw_table_find(const Table* table, const cwString* key, cwValue* val)
 {
     if (table->size == 0) return false;
 

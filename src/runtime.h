@@ -25,10 +25,10 @@ typedef enum
 struct cwRuntime
 {    
     /* Parser */
-    Chunk* chunk;
+    cwChunk* chunk;
 
-    Token current;
-    Token previous;
+    cwToken current;
+    cwToken previous;
     
     bool error;
     bool panic;
@@ -36,10 +36,10 @@ struct cwRuntime
     /* VM */
     uint8_t* ip;
 
-    Value stack[CW_STACK_MAX];
+    cwValue stack[CW_STACK_MAX];
     size_t stack_index;
 
-    Object* objects;
+    cwObject* objects;
     Table globals;
     Table strings;
 };
@@ -50,9 +50,9 @@ void cw_free(cwRuntime* cw);
 InterpretResult cw_interpret(cwRuntime* cw, const char* src);
 
 /* stack operations */
-void  cw_push_stack(cwRuntime* cw, Value val);
-Value cw_pop_stack(cwRuntime* cw);
-void  cw_reset_stack(cwRuntime* cw);
-Value cw_peek_stack(cwRuntime* cw, int distance);
+void    cw_push_stack(cwRuntime* cw, cwValue val);
+cwValue cw_pop_stack(cwRuntime* cw);
+void    cw_reset_stack(cwRuntime* cw);
+cwValue cw_peek_stack(cwRuntime* cw, int distance);
 
 #endif /* !CW_RUNTIME_H */

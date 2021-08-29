@@ -27,9 +27,9 @@ typedef enum
     OP_NEGATE,
     OP_PRINT,
     OP_RETURN,
-} OpCode;
+} cwOpCode;
 
-struct Chunk
+struct cwChunk
 {
     /* byte code with line information */
     uint8_t* bytes;
@@ -38,15 +38,15 @@ struct Chunk
     size_t cap;
 
     /* constants */
-    Value* constants;
+    cwValue* constants;
     size_t const_len;
     size_t const_cap;
 };
 
-void cw_chunk_init(Chunk* chunk);
-void cw_chunk_free(Chunk* chunk);
-void cw_chunk_write(Chunk* chunk, uint8_t byte, int line);
-int  cw_chunk_add_constant(Chunk* chunk, Value val);
+void cw_chunk_init(cwChunk* chunk);
+void cw_chunk_free(cwChunk* chunk);
+void cw_chunk_write(cwChunk* chunk, uint8_t byte, int line);
+int  cw_chunk_add_constant(cwChunk* chunk, cwValue val);
 
 void cw_emit_byte(cwRuntime* cw, uint8_t byte);
 void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b);

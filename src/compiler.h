@@ -1,7 +1,7 @@
 #ifndef CLOCKWORK_COMPILER_H
 #define CLOCKWORK_COMPILER_H
 
-#include "common.h"
+#include "scanner.h"
 
 typedef enum
 {
@@ -27,6 +27,6 @@ typedef struct
     Precedence precedence;
 } ParseRule;
 
-bool cw_compile(cwRuntime* cw, const char* src, Chunk* chunk);
+bool cw_compile(cwRuntime* cw, const char* src, cwChunk* chunk);
 
 #endif /* !CLOCKWORK_COMPILER_H */

@@ -5,7 +5,7 @@
 
 #include "runtime.h"
 
-void cw_disassemble_chunk(const Chunk* chunk, const char* name)
+void cw_disassemble_chunk(const cwChunk* chunk, const char* name)
 {
     printf("== %s ==\n", name);
     int offset = 0;
@@ -15,7 +15,7 @@ void cw_disassemble_chunk(const Chunk* chunk, const char* name)
     }
 }
 
-static int cw_disassemble_constant(const char* name, const Chunk* chunk, int offset)
+static int cw_disassemble_constant(const char* name, const cwChunk* chunk, int offset)
 {
     uint8_t constant = chunk->bytes[offset + 1];
     printf("%-16s %4d '", name, constant);
@@ -30,7 +30,7 @@ static int cw_disassemble_simple(const char* name, int offset)
     return offset + 1;
 }
 
-int  cw_disassemble_instruction(const Chunk* chunk, int offset)
+int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
 {
     printf("%04d ", offset);
     if (offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
@@ -69,7 +69,7 @@ int  cw_disassemble_instruction(const Chunk* chunk, int offset)
     }
 }
 
-void cw_print_value(Value val)
+void cw_print_value(cwValue val)
 {
     switch (val.type)
     {
@@ -81,7 +81,7 @@ void cw_print_value(Value val)
     }
 }
 
-void cw_print_object(Value val)
+void cw_print_object(cwValue val)
 {
     switch (OBJECT_TYPE(val))
     {
@@ -120,7 +120,7 @@ void cw_syntax_error(cwRuntime* cw, int line, const char* fmt, ...)
     cw->error = true;
 }
 
-void cw_syntax_error_at(cwRuntime* cw, Token* token, const char* msg)
+void cw_syntax_error_at(cwRuntime* cw, cwToken* token, const char* msg)
 {
     if (cw->panic) return;
     cw->panic = true;
