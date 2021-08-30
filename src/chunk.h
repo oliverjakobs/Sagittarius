@@ -10,6 +10,9 @@ typedef enum
     OP_TRUE,
     OP_FALSE,
     OP_POP,
+    /* local variables */
+    OP_SET_LOCAL,
+    OP_GET_LOCAL,
     /* global variables */
     OP_DEF_GLOBAL,
     OP_SET_GLOBAL,
@@ -50,6 +53,5 @@ int  cw_chunk_add_constant(cwChunk* chunk, cwValue val);
 
 void cw_emit_byte(cwRuntime* cw, uint8_t byte);
 void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b);
-void cw_emit_return(cwRuntime* cw);
 
 #endif /* !CLOCKWORK_CHUNK_H */

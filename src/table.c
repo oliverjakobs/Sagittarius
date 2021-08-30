@@ -97,15 +97,12 @@ bool cw_table_remove(Table* table, cwString* key)
     return true;
 }
 
-bool cw_table_find(const Table* table, const cwString* key, cwValue* val)
+cwValue* cw_table_find(const Table* table, const cwString* key)
 {
-    if (table->size == 0) return false;
+    if (table->size == 0) return NULL;
 
     uint32_t i = cw_find_entry(table->entries, table->capacity, key);
-    if (!table->entries[i].key) return false;
-
-    *val = table->entries[i].val;
-    return true;    
+    return table->entries[i].key ? &table->entries[i].val : NULL;
 }
 
 bool cw_table_copy(Table* src, Table* dst)

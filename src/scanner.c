@@ -5,14 +5,6 @@
 
 #include <string.h>
 
-void cw_init_scanner(cwRuntime* cw, const char* src)
-{
-    cw->current.type = TOKEN_NULL;
-    cw->current.start = src;
-    cw->current.end = src;
-    cw->current.line = 1;
-}
-
 static inline bool cw_isdigit(char c) { return c >= '0' && c <= '9'; }
 static inline bool cw_isalpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 

@@ -15,6 +15,12 @@ void cw_disassemble_chunk(const cwChunk* chunk, const char* name)
     }
 }
 
+static int cw_disassemble_simple(const char* name, int offset)
+{
+    printf("%s\n", name);
+    return offset + 1;
+}
+
 static int cw_disassemble_constant(const char* name, const cwChunk* chunk, int offset)
 {
     uint8_t constant = chunk->bytes[offset + 1];
@@ -24,10 +30,11 @@ static int cw_disassemble_constant(const char* name, const cwChunk* chunk, int o
     return offset + 2;
 }
 
-static int cw_disassemble_simple(const char* name, int offset)
+static int cw_disassemble_byte(const char* name, const cwChunk* chunk, int offset)
 {
-    printf("%s\n", name);
-    return offset + 1;
+    uint8_t slot = chunk->bytes[offset + 1];
+    printf("%-16s %4d\n", name, slot);
+    return offset + 2; 
 }
 
 int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
@@ -46,6 +53,8 @@ int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
     case OP_TRUE:       return cw_disassemble_simple("OP_TRUE", offset);
     case OP_FALSE:      return cw_disassemble_simple("OP_FALSE", offset);
     case OP_POP:        return cw_disassemble_simple("OP_POP", offset);
+    case OP_SET_LOCAL:  return cw_disassemble_byte("OP_SET_LOCAL", chunk, offset);
+    case OP_GET_LOCAL:  return cw_disassemble_byte("OP_GET_LOCAL", chunk, offset);
     case OP_DEF_GLOBAL: return cw_disassemble_constant("OP_DEF_GLOBAL", chunk, offset);
     case OP_SET_GLOBAL: return cw_disassemble_constant("OP_SET_GLOBAL", chunk, offset);
     case OP_GET_GLOBAL: return cw_disassemble_constant("OP_GET_GLOBAL", chunk, offset);

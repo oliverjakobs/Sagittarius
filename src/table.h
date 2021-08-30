@@ -21,7 +21,7 @@ void cw_table_free(Table* table);
 
 bool cw_table_insert(Table* table, cwString* key, cwValue val);
 bool cw_table_remove(Table* table, cwString* key);
-bool cw_table_find(const Table* table, const cwString* key, cwValue* val);
+cwValue* cw_table_find(const Table* table, const cwString* key);
 
 bool cw_table_copy(Table* src, Table* dst);
 cwString* cw_table_find_key(const Table* table, const char* str, size_t len, uint32_t hash);

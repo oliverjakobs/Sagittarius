@@ -27,6 +27,12 @@ typedef struct
     Precedence precedence;
 } ParseRule;
 
+typedef struct
+{
+    cwToken name;
+    int depth;
+} cwLocal;
+
 bool cw_compile(cwRuntime* cw, const char* src, cwChunk* chunk);
 
 #endif /* !CLOCKWORK_COMPILER_H */

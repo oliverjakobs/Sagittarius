@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "runtime.h"
 #include "scanner.h"
@@ -23,6 +24,42 @@ static uint8_t cw_make_constant(cwRuntime* cw, cwValue value)
 static uint8_t cw_identifier_constant(cwRuntime* cw, cwToken* name)
 {
     return cw_make_constant(cw, MAKE_OBJECT(cw_str_copy(cw, name->start, name->end - name->start)));
+}
+
+static bool cw_identifiers_equal(const cwToken* a, const cwToken* b)
+{
+    int a_len = a->end - a->start;
+    int b_len = b->end - b->start;
+
+    return (a_len == b_len) ? memcmp(a->start, b->start, a_len) == 0 : false;
+}
+
+static void cw_add_local(cwRuntime* cw, cwToken* name)
+{
+    if (cw->local_count > UINT8_MAX)
+    {
+        cw_syntax_error_at(cw, &cw->previous, "Too many variables in scope.");
+        return;
+    }
+
+    cwLocal* local = &cw->locals[cw->local_count++];
+    local->name = *name;
+    local->depth = -1;
+}
+
+static int cw_resolve_local(cwRuntime* cw, cwToken* name)
+{
+    for (int i = cw->local_count - 1; i >= 0; i--)
+    {
+        cwLocal* local = &cw->locals[i]; 
+        if (cw_identifiers_equal(name, &local->name))
+        {
+            if (local->depth < 0) 
+                cw_syntax_error_at(cw, name, "Can not read local variable in its own initializer.");
+            return i;
+        } 
+    }
+    return -1;
 }
 
 /* ----------------------------------| PARSING |--------------------------------------------- */
@@ -192,17 +229,63 @@ static void cw_print_statement(cwRuntime* cw)
     cw_emit_byte(cw, OP_PRINT);
 }
 
+static void cw_begin_scope(cwRuntime* cw)   { cw->scope_depth++; }
+static void cw_end_scope(cwRuntime* cw)
+{
+    cw_consume(cw, TOKEN_RBRACE, "Expect '}' after block.");
+    cw->scope_depth--;
+
+    while (cw->local_count > 0 && cw->locals[cw->local_count - 1].depth > cw->scope_depth)
+    {
+        cw_emit_byte(cw, OP_POP);
+        cw->local_count--;
+    }
+}
+
+static void cw_parse_declaration(cwRuntime* cw);
+
+static void cw_parse_block(cwRuntime* cw)
+{
+    while (cw->current.type != TOKEN_RBRACE && cw->current.type != TOKEN_EOF)
+        cw_parse_declaration(cw);
+}
+
 static void cw_parse_statement(cwRuntime* cw)
 {
-    if (cw_match(cw, TOKEN_PRINT))  cw_print_statement(cw);
-    else                            cw_expr_statement(cw);
+    if (cw_match(cw, TOKEN_PRINT))
+        cw_print_statement(cw);
+    else if (cw_match(cw, TOKEN_LBRACE))
+    {
+        cw_begin_scope(cw);
+        cw_parse_block(cw);
+        cw_end_scope(cw);
+    }
+    else
+        cw_expr_statement(cw);
 }
 
 static void cw_var_decl(cwRuntime* cw)
 {
     /* parse variable name */
     cw_consume(cw, TOKEN_IDENTIFIER, "Expect variable name.");
-    uint8_t global = cw_identifier_constant(cw, &cw->previous);
+
+    /* declare variable */
+    if (cw->scope_depth > 0)
+    {
+        cwToken* name = &cw->previous;
+        for (int i = cw->local_count - 1; i >= 0; i--)
+        {
+            cwLocal* local = &cw->locals[i];
+            if (local->depth != -1 && local->depth < cw->scope_depth) break;
+
+            if (cw_identifiers_equal(name, &local->name))
+                cw_syntax_error_at(cw, &cw->previous, "Already a variable with this name in this scope.");
+        }
+
+        cw_add_local(cw, name);
+    }
+    
+    uint8_t id = (cw->scope_depth <= 0) ? cw_identifier_constant(cw, &cw->previous) : 0;
 
     /* parse variable initialization value */
     if (cw_match(cw, TOKEN_ASSIGN)) cw_parse_expression(cw);
@@ -210,12 +293,20 @@ static void cw_var_decl(cwRuntime* cw)
 
     /* define variable */
     cw_consume_terminator(cw, "Expect terminator after var declaration.");
-    cw_emit_bytes(cw, OP_DEF_GLOBAL, global);
+    if (cw->scope_depth > 0)
+    {
+        /* mark initialized */
+        cw->locals[cw->local_count - 1].depth = cw->scope_depth;
+    }
+    else
+    {
+        cw_emit_bytes(cw, OP_DEF_GLOBAL, id);
+    }
 }
 
 static void cw_parse_declaration(cwRuntime* cw)
 {
-    if (cw_match_terminator(cw)) return;
+    if (cw_match_terminator(cw)) return; /* ignore empty statements */
 
     if (cw_match(cw, TOKEN_LET))    cw_var_decl(cw);
     else                            cw_parse_statement(cw); 
@@ -292,35 +383,51 @@ static void cw_parse_literal(cwRuntime* cw, bool can_assign)
 
 static void cw_parse_variable(cwRuntime* cw, bool can_assign)
 {
-    uint8_t arg = cw_identifier_constant(cw, &cw->previous);
+    uint8_t get_op, set_op;
+    int arg = cw_resolve_local(cw, &cw->previous);
+    if (arg >= 0)
+    {
+        get_op = OP_GET_LOCAL;
+        set_op = OP_SET_LOCAL;
+    }
+    else
+    {
+        arg = cw_identifier_constant(cw, &cw->previous);
+        get_op = OP_GET_GLOBAL;
+        set_op = OP_SET_GLOBAL;
+    }
 
     if (can_assign && cw_match(cw, TOKEN_ASSIGN))
     {
         cw_parse_expression(cw);
-        cw_emit_bytes(cw, OP_SET_GLOBAL, arg);
+        cw_emit_bytes(cw, set_op, (uint8_t)arg);
     }
     else 
     {
-        cw_emit_bytes(cw, OP_GET_GLOBAL, arg);
+        cw_emit_bytes(cw, get_op, (uint8_t)arg);
     }
 }
 
 void cw_compiler_end(cwRuntime* cw)
 {
-    cw_emit_return(cw);
+    cw_emit_byte(cw, OP_RETURN);
 #ifdef DEBUG_PRINT_CODE
-    if (!cw->error)
-    {
-        cw_disassemble_chunk(cw->chunk, "code");
-    }
+    if (!cw->error) cw_disassemble_chunk(cw->chunk, "code");
 #endif 
 }
 
 bool cw_compile(cwRuntime* cw, const char* src, cwChunk* chunk)
 {
-    cw_init_scanner(cw, src);
+    /* init first token */
+    cw->current.type = TOKEN_NULL;
+    cw->current.start = src;
+    cw->current.end = src;
+    cw->current.line = 1;
 
+    /* init compiler */
     cw->chunk = chunk;
+    cw->local_count = 0;
+    cw->scope_depth = 0;
     cw->error = false;
     cw->panic = false;
 

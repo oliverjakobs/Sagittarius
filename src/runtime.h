@@ -7,6 +7,7 @@
 
 #include "common.h"
 #include "scanner.h"
+#include "compiler.h"
 #include "chunk.h"
 #include "table.h"
 
@@ -23,10 +24,15 @@ typedef enum
 } InterpretResult;
 
 struct cwRuntime
-{    
-    /* Parser */
+{
+    /* Compiler */
     cwChunk* chunk;
 
+    cwLocal locals[UINT8_MAX + 1];
+    int local_count;
+    int scope_depth;
+
+    /* Parser */
     cwToken current;
     cwToken previous;
     
@@ -39,9 +45,11 @@ struct cwRuntime
     cwValue stack[CW_STACK_MAX];
     size_t stack_index;
 
-    cwObject* objects;
     Table globals;
     Table strings;
+
+    /* Garbage Collection */
+    cwObject* objects;
 };
 
 void cw_init(cwRuntime* cw);

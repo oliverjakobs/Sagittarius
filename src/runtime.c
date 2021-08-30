@@ -77,6 +77,18 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_TRUE:     cw_push_stack(cw, MAKE_BOOL(true)); break;
             case OP_FALSE:    cw_push_stack(cw, MAKE_BOOL(false)); break;
             case OP_POP:      cw_pop_stack(cw); break;
+            case OP_GET_LOCAL:
+            {
+                uint8_t slot = READ_BYTE();
+                cw_push_stack(cw, cw->stack[slot]);
+                break;
+            }
+            case OP_SET_LOCAL:
+            {
+                uint8_t slot = READ_BYTE();
+                cw->stack[slot] = cw_peek_stack(cw, 0);
+                break;
+            }
             case OP_DEF_GLOBAL:
             {
                 cwString* name = AS_STRING(READ_CONSTANT());
@@ -98,13 +110,13 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_GET_GLOBAL:
             {
                 cwString* name = AS_STRING(READ_CONSTANT());
-                cwValue value;
-                if (!cw_table_find(&cw->globals, name, &value))
+                cwValue* value = cw_table_find(&cw->globals, name);
+                if (!value)
                 {
                     cw_runtime_error(cw, "Undefined variable '%s'.", name->raw);
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                cw_push_stack(cw, value);
+                cw_push_stack(cw, *value);
                 break;
             }
             case OP_EQ: case OP_NOTEQ:

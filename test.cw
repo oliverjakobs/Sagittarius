@@ -5,10 +5,10 @@ breakfast = "beignets with " + beverage
 
 print breakfast;
 
-# Test Numbers
+# Test scope
 let a = 7
-let b = 35
-let c = 0.4
-
-print a + b
-print a - c
+{
+    let a = 42
+    print a
+}
+print a
