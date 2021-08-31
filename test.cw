@@ -1,14 +1,6 @@
-# Test program
-let breakfast = "beignets"
-let beverage = "cafe au lait"
-breakfast = "beignets with " + beverage
-
-print breakfast;
-
 # Test scope
 let a = 7
-{
-    let a = 42
-    print a
+if (a < 12) {
+    a = 5
 }
 print a

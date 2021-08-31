@@ -27,6 +27,7 @@ void cw_free(cwRuntime* cw)
 static InterpretResult cw_run(cwRuntime* cw)
 {
 #define READ_BYTE()     (*cw->ip++)
+#define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
 #define BINARY_OP_NUM(op) {                                                                         \
         if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))                   \
@@ -156,7 +157,6 @@ static InterpretResult cw_run(cwRuntime* cw)
             case OP_SUBTRACT: BINARY_OP_NUM(-);
             case OP_MULTIPLY: BINARY_OP_NUM(*);
             case OP_DIVIDE:   BINARY_OP_NUM(/);
-            case OP_NOT:      cw_push_stack(cw, MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
             case OP_NEGATE:
             {
                 if (!IS_NUMBER(cw_peek_stack(cw, 0)))
@@ -168,6 +168,13 @@ static InterpretResult cw_run(cwRuntime* cw)
                 cwValue val = cw_pop_stack(cw);
                 if (IS_FLOAT(val)) cw_push_stack(cw, MAKE_FLOAT(-AS_FLOAT(val)));
                 else               cw_push_stack(cw, MAKE_INT(-AS_INT(val)));
+                break;
+            }
+            case OP_NOT:      cw_push_stack(cw, MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
+            case OP_JUMP_IF_FALSE:
+            {
+                uint16_t offset = READ_SHORT();
+                if (cw_is_falsey(cw_peek_stack(cw, 0))) cw->ip += offset;
                 break;
             }
             case OP_PRINT:

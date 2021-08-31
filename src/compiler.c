@@ -242,6 +242,7 @@ static void cw_end_scope(cwRuntime* cw)
     }
 }
 
+static void cw_parse_statement(cwRuntime* cw);
 static void cw_parse_declaration(cwRuntime* cw);
 
 static void cw_parse_block(cwRuntime* cw)
@@ -250,9 +251,26 @@ static void cw_parse_block(cwRuntime* cw)
         cw_parse_declaration(cw);
 }
 
+static void cw_parse_stmt_if(cwRuntime* cw)
+{
+    cw_consume(cw, TOKEN_LPAREN, "Expect '(' after if statement.");
+    cw_parse_expression(cw);
+    cw_consume(cw, TOKEN_RPAREN, "Expect ')' after condition.");
+
+    int then_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
+    cw_parse_declaration(cw);
+
+    cw_patch_jump(cw, then_jump);
+}
+
 static void cw_parse_statement(cwRuntime* cw)
 {
-    if (cw_match(cw, TOKEN_PRINT))
+    /* Todo: dont just ignore stmt -> skip to next */
+    if (cw_match_terminator(cw)) return; /* ignore empty statements */
+    
+    if (cw_match(cw, TOKEN_IF))
+        cw_parse_stmt_if(cw);
+    else if (cw_match(cw, TOKEN_PRINT))
         cw_print_statement(cw);
     else if (cw_match(cw, TOKEN_LBRACE))
     {
@@ -306,8 +324,6 @@ static void cw_var_decl(cwRuntime* cw)
 
 static void cw_parse_declaration(cwRuntime* cw)
 {
-    if (cw_match_terminator(cw)) return; /* ignore empty statements */
-
     if (cw_match(cw, TOKEN_LET))    cw_var_decl(cw);
     else                            cw_parse_statement(cw); 
 

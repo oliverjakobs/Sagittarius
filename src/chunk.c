@@ -1,5 +1,6 @@
 #include "chunk.h"
 
+#include "debug.h"
 #include "memory.h"
 #include "runtime.h"
 
@@ -59,4 +60,24 @@ void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b)
 {
     cw_emit_byte(cw, a);
     cw_emit_byte(cw, b);
+}
+
+int cw_emit_jump(cwRuntime* cw, uint8_t instruction)
+{
+    cw_emit_byte(cw, instruction);
+    cw_emit_byte(cw, 0xff);
+    cw_emit_byte(cw, 0xff);
+    return cw->chunk->len - 2;
+}
+
+void cw_patch_jump(cwRuntime* cw, int offset)
+{
+    /* -2 to adjust for the bytecode for the jump offset itself. */
+    int jump = cw->chunk->len - offset - 2;
+
+    if (jump > UINT16_MAX)
+        cw_syntax_error_at(cw, &cw->previous, "Too much code to jump over.");
+
+    cw->chunk->bytes[offset] = (jump >> 8) & 0xff;
+    cw->chunk->bytes[offset + 1] = jump & 0xff;
 }
