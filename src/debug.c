@@ -77,8 +77,9 @@ int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
     case OP_DIVIDE:         return cw_disassemble_simple("OP_DIVIDE", offset);
     case OP_NEGATE:         return cw_disassemble_simple("OP_NEGATE", offset);
     case OP_NOT:            return cw_disassemble_simple("OP_NOT", offset);
-    case OP_JUMP:           return cw_disassemble_jump("OP_JUMP", 1, chunk, offset);
     case OP_JUMP_IF_FALSE:  return cw_disassemble_jump("OP_JUMP_IF_FALSE", 1, chunk, offset);
+    case OP_JUMP:           return cw_disassemble_jump("OP_JUMP", 1, chunk, offset);
+    case OP_LOOP:           return cw_disassemble_jump("OP_LOOP", -1, chunk, offset);
     case OP_PRINT:          return cw_disassemble_simple("OP_PRINT", offset);
     case OP_RETURN:         return cw_disassemble_simple("OP_RETURN", offset);
     default:

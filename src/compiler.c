@@ -135,13 +135,23 @@ int cw_emit_jump(cwRuntime* cw, uint8_t instruction)
     return cw->chunk->len - 2;
 }
 
+void cw_emit_loop(cwRuntime* cw, int start)
+{
+    cw_emit_byte(cw, OP_LOOP);
+
+    int offset = cw->chunk->len - start + 2;
+    if (offset > UINT16_MAX) cw_syntax_error_at(cw, &cw->previous, "Loop body too large.");
+
+    cw_emit_byte(cw, (offset >> 8) & 0xff);
+    cw_emit_byte(cw, offset & 0xff);
+}
+
 void cw_patch_jump(cwRuntime* cw, int offset)
 {
     /* -2 to adjust for the bytecode for the jump offset itself. */
     int jump = cw->chunk->len - offset - 2;
 
-    if (jump > UINT16_MAX)
-        cw_syntax_error_at(cw, &cw->previous, "Too much code to jump over.");
+    if (jump > UINT16_MAX) cw_syntax_error_at(cw, &cw->previous, "Too much code to jump over.");
 
     cw->chunk->bytes[offset] = (jump >> 8) & 0xff;
     cw->chunk->bytes[offset + 1] = jump & 0xff;

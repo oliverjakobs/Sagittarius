@@ -5,56 +5,6 @@
 #include "debug.h"
 #include "runtime.h"
 
-/* --------------------------| utility |------------------------------------------------- */
-void cw_advance(cwRuntime* cw)
-{
-    cw->previous = cw->current;
-    const char* cursor = cw->previous.end;
-    int line = cw->previous.line;
-    while (true)
-    {
-        cursor = cw_scan_token(cw, &cw->current, cursor, line);
-        if (!cw->error) break;
-    }
-}
-
-void cw_consume(cwRuntime* cw, cwTokenType type, const char* message)
-{
-    if (cw->current.type == type)   cw_advance(cw);
-    else                            cw_syntax_error_at(cw, &cw->current, message);
-}
-
-bool cw_match(cwRuntime* cw, cwTokenType type)
-{
-    if (cw->current.type != type) return false;
-    cw_advance(cw);
-    return true;
-}
-
-static void cw_parser_synchronize(cwRuntime* cw)
-{
-    cw->panic = false;
-
-    while (cw->current.type != TOKEN_EOF)
-    {
-        if (cw->previous.type == TOKEN_SEMICOLON) return;
-        switch (cw->current.type)
-        {
-        case TOKEN_IF:
-        case TOKEN_FOR:
-        case TOKEN_WHILE:
-        case TOKEN_LET:
-        case TOKEN_FUNC:
-        case TOKEN_DATATYPE: 
-        case TOKEN_RETURN:
-        case TOKEN_PRINT:
-            return;
-        }
-
-        cw_advance(cw);
-    }
-}
-
 /* --------------------------| parse rules |--------------------------------------------- */
 typedef void (*ParseCallback)(cwRuntime* cw, bool can_assign);
 
@@ -121,12 +71,10 @@ ParseRule rules[] = {
     [TOKEN_PRINT]       = { NULL,               NULL,               PREC_NONE },
 };
 
-static ParseRule* cw_get_parserule(cwTokenType type) { return &rules[type]; }
-
 void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 {
     cw_advance(cw);
-    ParseCallback prefix_rule = cw_get_parserule(cw->previous.type)->prefix;
+    ParseCallback prefix_rule = rules[cw->previous.type].prefix;
 
     if (!prefix_rule)
     {
@@ -137,10 +85,10 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
     bool can_assign = precedence <= PREC_ASSIGNMENT;
     prefix_rule(cw, can_assign);
 
-    while (precedence <= cw_get_parserule(cw->current.type)->precedence)
+    while (precedence <= rules[cw->current.type].precedence)
     {
         cw_advance(cw);
-        ParseCallback infix_rule = cw_get_parserule(cw->previous.type)->infix;
+        ParseCallback infix_rule = rules[cw->previous.type].infix;
         infix_rule(cw, can_assign);
     }
 
@@ -148,56 +96,6 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
     {
         cw_syntax_error_at(cw, &cw->previous, "Invalid assignment target.");
     }
-}
-
-void cw_parse_expression(cwRuntime* cw)
-{
-    cw_parse_precedence(cw, PREC_ASSIGNMENT);
-}
-
-static void cw_var_decl(cwRuntime* cw)
-{
-    /* parse variable name */
-    cw_consume(cw, TOKEN_IDENTIFIER, "Expect variable name.");
-
-    /* declare variable */
-    if (cw->scope_depth > 0)
-    {
-        cwToken* name = &cw->previous;
-        for (int i = cw->local_count - 1; i >= 0; i--)
-        {
-            cwLocal* local = &cw->locals[i];
-            if (local->depth != -1 && local->depth < cw->scope_depth) break;
-
-            if (cw_identifiers_equal(name, &local->name))
-                cw_syntax_error_at(cw, &cw->previous, "Already a variable with this name in this scope.");
-        }
-
-        cw_add_local(cw, name);
-    }
-    
-    uint8_t id = (cw->scope_depth <= 0) ? cw_identifier_constant(cw, &cw->previous) : 0;
-
-    /* parse variable initialization value */
-    if (cw_match(cw, TOKEN_ASSIGN)) cw_parse_expression(cw);
-    else                            cw_syntax_error_at(cw, &cw->previous, "Undefined variable.");
-
-    /* define variable */
-    cw_consume(cw, TOKEN_SEMICOLON, "Expect terminator after var declaration.");
-    if (cw->scope_depth > 0)
-        cw->locals[cw->local_count - 1].depth = cw->scope_depth; /* mark initialized */
-    else
-        cw_emit_bytes(cw, OP_DEF_GLOBAL, id);
-}
-
-int cw_parse_declaration(cwRuntime* cw)
-{
-    if (cw_match(cw, TOKEN_LET))    cw_var_decl(cw);
-    else                            cw_parse_statement(cw); 
-
-    if (cw->panic) cw_parser_synchronize(cw);
-
-    return 1;
 }
 
 /* --------------------------| parse callbacks |----------------------------------------- */
@@ -240,8 +138,7 @@ static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 static void cw_parse_binary(cwRuntime* cw, bool can_assign)
 {
     cwTokenType operator = cw->previous.type;
-    ParseRule* rule = cw_get_parserule(operator);
-    cw_parse_precedence(cw, (Precedence)(rule->precedence + 1));
+    cw_parse_precedence(cw, (Precedence)(rules[operator].precedence + 1));
 
     switch (operator)
     {
@@ -314,5 +211,55 @@ static void cw_parse_variable(cwRuntime* cw, bool can_assign)
     else 
     {
         cw_emit_bytes(cw, get_op, (uint8_t)arg);
+    }
+}
+
+/* --------------------------| utility |------------------------------------------------- */
+void cw_advance(cwRuntime* cw)
+{
+    cw->previous = cw->current;
+    const char* cursor = cw->previous.end;
+    int line = cw->previous.line;
+    while (true)
+    {
+        cursor = cw_scan_token(cw, &cw->current, cursor, line);
+        if (!cw->error) break;
+    }
+}
+
+void cw_consume(cwRuntime* cw, cwTokenType type, const char* message)
+{
+    if (cw->current.type == type)   cw_advance(cw);
+    else                            cw_syntax_error_at(cw, &cw->current, message);
+}
+
+bool cw_match(cwRuntime* cw, cwTokenType type)
+{
+    if (cw->current.type != type) return false;
+    cw_advance(cw);
+    return true;
+}
+
+void cw_parser_synchronize(cwRuntime* cw)
+{
+    cw->panic = false;
+
+    while (cw->current.type != TOKEN_EOF)
+    {
+        if (cw->previous.type == TOKEN_SEMICOLON) return;
+        switch (cw->current.type)
+        {
+        case TOKEN_IF:
+        case TOKEN_FOR:
+        case TOKEN_WHILE:
+        case TOKEN_LET:
+        case TOKEN_FUNC:
+        case TOKEN_DATATYPE: 
+        case TOKEN_RETURN:
+        case TOKEN_PRINT:
+            return;
+        }
+
+        cw_advance(cw);
     }
 }

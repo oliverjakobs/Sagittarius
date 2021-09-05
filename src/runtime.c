@@ -171,16 +171,23 @@ static InterpretResult cw_run(cwRuntime* cw)
                 break;
             }
             case OP_NOT:      cw_push_stack(cw, MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
+            case OP_JUMP_IF_FALSE:
+            {
+                uint16_t offset = READ_SHORT();
+                if (cw_is_falsey(cw_peek_stack(cw, 0))) cw->ip += offset;
+                break;
+            }
+            /* NOTE: combine OP_JUMP and OP_LOOP */
             case OP_JUMP:
             {
                 uint16_t offset = READ_SHORT();
                 cw->ip += offset;
                 break;
             }
-            case OP_JUMP_IF_FALSE:
+            case OP_LOOP:
             {
                 uint16_t offset = READ_SHORT();
-                if (cw_is_falsey(cw_peek_stack(cw, 0))) cw->ip += offset;
+                cw->ip -= offset;
                 break;
             }
             case OP_PRINT:

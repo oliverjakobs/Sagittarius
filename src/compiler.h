@@ -31,6 +31,7 @@ typedef enum
     /* control flow operations */
     OP_JUMP_IF_FALSE,
     OP_JUMP,
+    OP_LOOP,
     OP_PRINT,
     OP_RETURN,
 } cwOpCode;
@@ -79,6 +80,7 @@ void cw_emit_byte(cwRuntime* cw, uint8_t byte);
 void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b);
 
 int  cw_emit_jump(cwRuntime* cw, uint8_t instruction);
+void cw_emit_loop(cwRuntime* cw, int start);
 void cw_patch_jump(cwRuntime* cw, int offset);
 
 #endif /* !CLOCKWORK_COMPILER_H */

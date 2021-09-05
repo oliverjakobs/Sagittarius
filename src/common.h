@@ -6,9 +6,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define DEBUG_PRINT_CODE
-#define DEBUG_TRACE_EXECUTION
-
 typedef struct cwRuntime cwRuntime;
 typedef struct cwToken cwToken;
 typedef struct cwChunk cwChunk;

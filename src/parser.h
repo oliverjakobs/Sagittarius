@@ -18,13 +18,12 @@ typedef enum
     PREC_PRIMARY
 } Precedence;
 
+void cw_parse_precedence(cwRuntime* cw, Precedence precedence);
+
 /* utility */
 void cw_advance(cwRuntime* cw);
 void cw_consume(cwRuntime* cw, cwTokenType type, const char* message);
 bool cw_match(cwRuntime* cw, cwTokenType type);
-
-void cw_parse_precedence(cwRuntime* cw, Precedence precedence);
-void cw_parse_expression(cwRuntime* cw);
-int cw_parse_declaration(cwRuntime* cw);
+void cw_parser_synchronize(cwRuntime* cw);
 
 #endif /* !CLOCKWORK_PARSER_H */

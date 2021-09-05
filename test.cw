@@ -1,7 +1,2 @@
-# Test scope
-let a = 7;
-if (a < 12 or a > 5)
-{
-    a = 5;
-}
-print a;
+for (let i = 0; i < 10; i = i + 1) 
+    print i;
