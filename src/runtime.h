@@ -6,9 +6,7 @@
 #include <stddef.h>
 
 #include "common.h"
-#include "scanner.h"
 #include "compiler.h"
-#include "chunk.h"
 #include "table.h"
 
 #define DEBUG_PRINT_CODE

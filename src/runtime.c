@@ -171,6 +171,12 @@ static InterpretResult cw_run(cwRuntime* cw)
                 break;
             }
             case OP_NOT:      cw_push_stack(cw, MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
+            case OP_JUMP:
+            {
+                uint16_t offset = READ_SHORT();
+                cw->ip += offset;
+                break;
+            }
             case OP_JUMP_IF_FALSE:
             {
                 uint16_t offset = READ_SHORT();

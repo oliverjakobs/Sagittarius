@@ -8,12 +8,14 @@
 static inline bool cw_isdigit(char c) { return c >= '0' && c <= '9'; }
 static inline bool cw_isalpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 
-static const char* cw_skip_whitespaces(const char* cursor)
+static const char* cw_skip_whitespaces(const char* cursor, int* line)
 {
     while (*cursor != '\0')
     {
         switch (*cursor)
         {
+        case '\n':
+            (*line)++;
         case ' ': case '\t': case '\r':
             cursor++;
             break;
@@ -73,7 +75,7 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
     if (*cursor == c2) { token->type = t2; cursor++; }  \
     break;
     
-    cursor = cw_skip_whitespaces(cursor);
+    cursor = cw_skip_whitespaces(cursor, &line);
 
     token->mod = TOKENMOD_NONE;
     token->line = line;
@@ -82,7 +84,6 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
     switch (*cursor)
     {
     case '\0': token->type = TOKEN_EOF; break;
-    CW_TOKEN_CASE1('\n', TOKEN_TERMINATOR);
     case '0': case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9':
     {
         cursor++;

@@ -1,7 +1,7 @@
 #ifndef CLOCKWORK_DEBUG_H
 #define CLOCKWORK_DEBUG_H
 
-#include "chunk.h"
+#include "compiler.h"
 
 void cw_disassemble_chunk(const cwChunk* chunk, const char* name);
 int  cw_disassemble_instruction(const cwChunk* chunk, int offset);
