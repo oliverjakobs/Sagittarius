@@ -36,20 +36,6 @@ typedef enum
     OP_RETURN,
 } cwOpCode;
 
-struct cwChunk
-{
-    /* byte code with line information */
-    uint8_t* bytes;
-    int*     lines;
-    size_t len;
-    size_t cap;
-
-    /* constants */
-    cwValue* constants;
-    size_t const_len;
-    size_t const_cap;
-};
-
 typedef struct
 {
     cwToken name;
@@ -66,14 +52,6 @@ bool cw_identifiers_equal(const cwToken* a, const cwToken* b);
 /* locals */
 void cw_add_local(cwRuntime* cw, cwToken* name);
 int  cw_resolve_local(cwRuntime* cw, cwToken* name);
-
-/* chunk */
-void cw_chunk_init(cwChunk* chunk);
-void cw_chunk_free(cwChunk* chunk);
-/* NOTE: merge with cw_emit_byte */
-void cw_chunk_write(cwChunk* chunk, uint8_t byte, int line);
-/* NOTE: merge with cw_make_constant */
-int  cw_chunk_add_constant(cwChunk* chunk, cwValue val);
 
 /* writing byte code */
 void cw_emit_byte(cwRuntime* cw, uint8_t byte);

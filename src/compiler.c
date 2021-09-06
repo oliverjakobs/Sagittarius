@@ -13,16 +13,23 @@
 
 
 /* --------------------------| identifiers |--------------------------------------------- */
-uint8_t cw_make_constant(cwRuntime* cw, cwValue value)
+uint8_t cw_make_constant(cwRuntime* cw, cwValue val)
 {
-    int constant = cw_chunk_add_constant(cw->chunk, value);
-    if (constant > UINT8_MAX)
+    if (cw->chunk->const_cap < cw->chunk->const_len + 1)
+    {
+        int old_cap = cw->chunk->const_cap;
+        cw->chunk->const_cap = CW_GROW_CAPACITY(old_cap);
+        cw->chunk->constants = CW_GROW_ARRAY(cwValue, cw->chunk->constants, old_cap, cw->chunk->const_cap);
+    }
+
+    cw->chunk->constants[cw->chunk->const_len] = val;
+    if (cw->chunk->const_len > UINT8_MAX)
     {
         cw_syntax_error_at(cw, &cw->previous, "Too many constants in one chunk.");
         return 0;
     }
 
-    return (uint8_t)constant;
+    return (uint8_t)cw->chunk->const_len++;
 }
 
 uint8_t cw_identifier_constant(cwRuntime* cw, cwToken* name)
@@ -34,7 +41,6 @@ bool cw_identifiers_equal(const cwToken* a, const cwToken* b)
 {
     int a_len = a->end - a->start;
     int b_len = b->end - b->start;
-
     return (a_len == b_len) ? memcmp(a->start, b->start, a_len) == 0 : false;
 }
 
@@ -67,58 +73,20 @@ int cw_resolve_local(cwRuntime* cw, cwToken* name)
     return -1;
 }
 
-/* --------------------------| chunk |--------------------------------------------------- */
-void cw_chunk_init(cwChunk* chunk)
-{
-    chunk->bytes = NULL;
-    chunk->lines = NULL;
-    chunk->len = 0;
-    chunk->cap = 0;
-    chunk->constants = NULL;
-    chunk->const_len = 0;
-    chunk->const_cap = 0;
-}
-
-void cw_chunk_free(cwChunk* chunk)
-{
-    CW_FREE_ARRAY(uint8_t, chunk->bytes, chunk->cap);
-    CW_FREE_ARRAY(int, chunk->lines, chunk->cap);
-    CW_FREE_ARRAY(cwValue, chunk->constants, chunk->const_cap);
-    cw_chunk_init(chunk);
-}
-
-void cw_chunk_write(cwChunk* chunk, uint8_t byte, int line)
-{
-    if (chunk->cap < chunk->len + 1)
-    {
-        int old_cap = chunk->cap;
-        chunk->cap = CW_GROW_CAPACITY(old_cap);
-        chunk->bytes = CW_GROW_ARRAY(uint8_t, chunk->bytes, old_cap, chunk->cap);
-        chunk->lines = CW_GROW_ARRAY(int, chunk->lines, old_cap, chunk->cap);
-    }
-
-    chunk->bytes[chunk->len] = byte;
-    chunk->lines[chunk->len] = line;
-    chunk->len++;
-}
-
-int cw_chunk_add_constant(cwChunk* chunk, cwValue val)
-{
-    if (chunk->const_cap < chunk->const_len + 1)
-    {
-        int old_cap = chunk->const_cap;
-        chunk->const_cap = CW_GROW_CAPACITY(old_cap);
-        chunk->constants = CW_GROW_ARRAY(cwValue, chunk->constants, old_cap, chunk->const_cap);
-    }
-
-    chunk->constants[chunk->const_len] = val;
-    return chunk->const_len++;
-}
-
 /* --------------------------| writing byte code |--------------------------------------- */
 void cw_emit_byte(cwRuntime* cw, uint8_t byte)
 {
-    cw_chunk_write(cw->chunk, byte, cw->previous.line);
+    if (cw->chunk->cap < cw->chunk->len + 1)
+    {
+        int old_cap = cw->chunk->cap;
+        cw->chunk->cap = CW_GROW_CAPACITY(old_cap);
+        cw->chunk->bytes = CW_GROW_ARRAY(uint8_t, cw->chunk->bytes, old_cap, cw->chunk->cap);
+        cw->chunk->lines = CW_GROW_ARRAY(int, cw->chunk->lines, old_cap, cw->chunk->cap);
+    }
+
+    cw->chunk->bytes[cw->chunk->len] = byte;
+    cw->chunk->lines[cw->chunk->len] = cw->previous.line;
+    cw->chunk->len++;
 }
 
 void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b)

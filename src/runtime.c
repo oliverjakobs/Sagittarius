@@ -29,17 +29,14 @@ static InterpretResult cw_run(cwRuntime* cw)
 #define READ_BYTE()     (*cw->ip++)
 #define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
-#define BINARY_OP_NUM(op) {                                                                         \
-        if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))                   \
-        {                                                                                           \
-            cw_runtime_error(cw, "Operands must be numbers.");                                      \
-            return INTERPRET_RUNTIME_ERROR;                                                         \
-        }                                                                                           \
-        cwValue b = cw_pop_stack(cw);                                                               \
-        cwValue a = cw_pop_stack(cw);                                                               \
-        if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) op AS_FLOAT(b)));  \
-        else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) op AS_INT(b)));        \
-    } break
+#define BINARY_OP_NUM(op)                                                           \
+        if (!op(&cw->stack[cw->stack_index - 2], &cw->stack[cw->stack_index - 1]))  \
+        {                                                                           \
+            cw_runtime_error(cw, "Operands must be two numbers.");                  \
+            return INTERPRET_RUNTIME_ERROR;                                         \
+        }                                                                           \
+        cw_pop_stack(cw);                                                           \
+        break
 #define BINARY_OP_BOOL(op) {                                                                        \
         if (!IS_NUMBER(cw_peek_stack(cw, 0)) || !IS_NUMBER(cw_peek_stack(cw, 1)))                   \
         {                                                                                           \
@@ -139,24 +136,20 @@ static InterpretResult cw_run(cwRuntime* cw)
                     cwString* b = AS_STRING(cw_pop_stack(cw));
                     cwString* a = AS_STRING(cw_pop_stack(cw));
                     cw_push_stack(cw, MAKE_OBJECT(cw_str_concat(cw, a, b)));
+                    break;
                 }
-                else if (IS_NUMBER(cw_peek_stack(cw, 0)) && IS_NUMBER(cw_peek_stack(cw, 1)))
-                {
-                    cwValue b = cw_pop_stack(cw);
-                    cwValue a = cw_pop_stack(cw);
-                    if (IS_FLOAT(a) || IS_FLOAT(b)) cw_push_stack(cw, MAKE_FLOAT(AS_FLOAT(a) + AS_FLOAT(b)));
-                    else                            cw_push_stack(cw, MAKE_INT(AS_INT(a) + AS_INT(b)));
-                }
-                else
+
+                if (!cw_value_add(&cw->stack[cw->stack_index - 2], &cw->stack[cw->stack_index - 1]))
                 {
                     cw_runtime_error(cw, "Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                cw_pop_stack(cw);
                 break;
             }
-            case OP_SUBTRACT: BINARY_OP_NUM(-);
-            case OP_MULTIPLY: BINARY_OP_NUM(*);
-            case OP_DIVIDE:   BINARY_OP_NUM(/);
+            case OP_SUBTRACT: BINARY_OP_NUM(cw_value_sub);
+            case OP_MULTIPLY: BINARY_OP_NUM(cw_value_mult);
+            case OP_DIVIDE:   BINARY_OP_NUM(cw_value_div);
             case OP_NEGATE:
             {
                 if (!IS_NUMBER(cw_peek_stack(cw, 0)))

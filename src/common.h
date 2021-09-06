@@ -8,11 +8,12 @@
 
 typedef struct cwRuntime cwRuntime;
 typedef struct cwToken cwToken;
-typedef struct cwChunk cwChunk;
 
 typedef struct cwObject cwObject;
 typedef struct cwString cwString;
+typedef struct cwFunction cwFunction;
 
+/* value */
 typedef enum
 {
     VAL_NULL = 0, 
@@ -56,10 +57,34 @@ static inline float   cw_valtof(cwValue val) { return IS_FLOAT(val) ? val.as.fva
 #define MAKE_FLOAT(val)   ((cwValue){ .type = VAL_FLOAT,  { .fval = val }})
 #define MAKE_OBJECT(obj)  ((cwValue){ .type = VAL_OBJECT, { .object = (cwObject*)obj }})
 
+cwValue* cw_value_add(cwValue* a, const cwValue* b);
+cwValue* cw_value_sub(cwValue* a, const cwValue* b);
+cwValue* cw_value_mult(cwValue* a, const cwValue* b);
+cwValue* cw_value_div(cwValue* a, const cwValue* b);
+
 /* null, false and 0 are falsey and every other value behaves like true */
 bool cw_is_falsey(cwValue val);
 bool cw_values_equal(cwValue a, cwValue b);
 
+/* chunk */
+typedef struct
+{
+    /* byte code with line information */
+    uint8_t* bytes;
+    int*     lines;
+    size_t len;
+    size_t cap;
+
+    /* constants */
+    cwValue* constants;
+    size_t const_len;
+    size_t const_cap;
+} cwChunk;
+
+void cw_chunk_init(cwChunk* chunk);
+void cw_chunk_free(cwChunk* chunk);
+
+/* objects */
 typedef enum
 {
     OBJ_STRING,
@@ -71,12 +96,12 @@ struct cwObject
     cwObject* next;
 };
 
-struct cwString
+struct cwFunction
 {
     cwObject obj;
-    char* raw;
-    size_t len;
-    uint32_t hash;
+    cwString* name;
+    cwChunk chunk;
+    int arity;
 };
 
 static inline bool cw_is_obj_type(cwValue value, cwObjectType type) 
@@ -92,12 +117,20 @@ static inline bool cw_is_obj_type(cwValue value, cwObjectType type)
 
 void cw_free_objects(cwRuntime* cw);
 
+/* strings */
+struct cwString
+{
+    cwObject obj;
+    char* raw;
+    size_t len;
+    uint32_t hash;
+};
+
 cwString* cw_str_take(cwRuntime* cw, char* src, size_t len);
 cwString* cw_str_copy(cwRuntime* cw, const char* src, size_t len);
 cwString* cw_str_concat(cwRuntime* cw, cwString* a, cwString* b);
 
 cwString* cw_find_str(cwRuntime* cw, const char* str, size_t len);
-
 uint32_t cw_hash_str(const char* str, size_t len);
 
 #endif /* !CLOCKWORK_COMMON_H */

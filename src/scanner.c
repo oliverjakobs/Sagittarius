@@ -74,6 +74,11 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
     token->type = t1; cursor++;                         \
     if (*cursor == c2) { token->type = t2; cursor++; }  \
     break;
+#define CW_TOKEN_CASE3(c1, t1, c2, t2, c3, t3) case c1:     \
+    token->type = t1; cursor++;                             \
+    if (*cursor == c2) { token->type = t2; cursor++; }      \
+    else if (*cursor == c3) { token->type = t3; cursor++; } \
+    break;
     
     cursor = cw_skip_whitespaces(cursor, &line);
 
@@ -129,7 +134,6 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
         token->type = TOKEN_STRING;
         break;
     }
-    /* single character token */
     CW_TOKEN_CASE1('(', TOKEN_LPAREN)
     CW_TOKEN_CASE1(')', TOKEN_RPAREN)
     CW_TOKEN_CASE1('{', TOKEN_LBRACE)
@@ -140,11 +144,10 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
     CW_TOKEN_CASE1(',', TOKEN_COMMA)
     CW_TOKEN_CASE1(':', TOKEN_COLON)
     CW_TOKEN_CASE1(';', TOKEN_SEMICOLON)
-    CW_TOKEN_CASE1('-', TOKEN_MINUS)
-    CW_TOKEN_CASE1('+', TOKEN_PLUS)
-    CW_TOKEN_CASE1('/', TOKEN_SLASH)
-    CW_TOKEN_CASE1('*', TOKEN_ASTERISK)
-    /* potential double character token */
+    CW_TOKEN_CASE3('-', TOKEN_MINUS,    '-', TOKEN_DEC, '=', TOKEN_SUB_ASSIGN)
+    CW_TOKEN_CASE2('+', TOKEN_PLUS,     '+', TOKEN_INC, '=', TOKEN_ADD_ASSIGN)
+    CW_TOKEN_CASE2('/', TOKEN_SLASH,    '=', TOKEN_DIV_ASSIGN)
+    CW_TOKEN_CASE2('*', TOKEN_ASTERISK, '=', TOKEN_MULT_ASSIGN)
     CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION,  '=', TOKEN_NOTEQ)
     CW_TOKEN_CASE2('=', TOKEN_ASSIGN,       '=', TOKEN_EQ)
     CW_TOKEN_CASE2('<', TOKEN_LT,           '=', TOKEN_LTEQ)

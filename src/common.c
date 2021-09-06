@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 
+/* --------------------------| value |--------------------------------------------------- */
 bool cw_is_falsey(cwValue val)
 {
     return IS_NULL(val) || (IS_BOOL(val) && !AS_BOOL(val)) 
@@ -29,8 +30,99 @@ bool cw_values_equal(cwValue a, cwValue b)
     return false;
 }
 
+cwValue* cw_value_add(cwValue* a, const cwValue* b)
+{
+    if (!cw_is_number(*a) || !cw_is_number(*b)) return NULL;
 
-/* objects */
+    if (a->type == VAL_FLOAT || b->type == VAL_FLOAT)
+    {
+        a->as.fval = cw_valtof(*a) + cw_valtof(*b);
+        a->type = VAL_FLOAT;
+    }
+    else
+    {
+        a->as.ival += b->as.ival;
+        a->type = VAL_INT;
+    }
+
+    return a;
+}
+
+cwValue* cw_value_sub(cwValue* a, const cwValue* b)
+{
+    if (!cw_is_number(*a) || !cw_is_number(*b)) return NULL;
+
+    if (a->type == VAL_FLOAT || b->type == VAL_FLOAT)
+    {
+        a->as.fval = cw_valtof(*a) - cw_valtof(*b);
+        a->type = VAL_FLOAT;
+    }
+    else
+    {
+        a->as.ival -= b->as.ival;
+        a->type = VAL_INT;
+    }
+
+    return a;
+}
+
+cwValue* cw_value_mult(cwValue* a, const cwValue* b)
+{
+    if (!cw_is_number(*a) || !cw_is_number(*b)) return NULL;
+
+    if (a->type == VAL_FLOAT || b->type == VAL_FLOAT)
+    {
+        a->as.fval = cw_valtof(*a) * cw_valtof(*b);
+        a->type = VAL_FLOAT;
+    }
+    else
+    {
+        a->as.ival *= b->as.ival;
+        a->type = VAL_INT;
+    }
+
+    return a;
+}
+
+cwValue* cw_value_div(cwValue* a, const cwValue* b)
+{
+    if (!cw_is_number(*a) || !cw_is_number(*b)) return NULL;
+
+    if (a->type == VAL_FLOAT || b->type == VAL_FLOAT)
+    {
+        a->as.fval = cw_valtof(*a) / cw_valtof(*b);
+        a->type = VAL_FLOAT;
+    }
+    else
+    {
+        a->as.ival /= b->as.ival;
+        a->type = VAL_INT;
+    }
+
+    return a;
+}
+
+/* --------------------------| chunk |--------------------------------------------------- */
+void cw_chunk_init(cwChunk* chunk)
+{
+    chunk->bytes = NULL;
+    chunk->lines = NULL;
+    chunk->len = 0;
+    chunk->cap = 0;
+    chunk->constants = NULL;
+    chunk->const_len = 0;
+    chunk->const_cap = 0;
+}
+
+void cw_chunk_free(cwChunk* chunk)
+{
+    CW_FREE_ARRAY(uint8_t, chunk->bytes, chunk->cap);
+    CW_FREE_ARRAY(int, chunk->lines, chunk->cap);
+    CW_FREE_ARRAY(cwValue, chunk->constants, chunk->const_cap);
+    cw_chunk_init(chunk);
+}
+
+/* --------------------------| objects |------------------------------------------------- */
 static cwObject* cw_object_alloc(cwRuntime* cw, size_t size, cwObjectType type)
 {
     cwObject* object = cw_reallocate(NULL, 0, size);
@@ -65,7 +157,7 @@ void cw_free_objects(cwRuntime* cw)
     }
 }
 
-/* strings */
+/* --------------------------| strings |------------------------------------------------- */
 static cwString* cw_str_alloc(cwRuntime* cw, char* src, size_t len, uint32_t hash)
 {
     cwString* str = (cwString*)cw_object_alloc(cw, sizeof(cwString), OBJ_STRING);

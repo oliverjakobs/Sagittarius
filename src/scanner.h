@@ -6,7 +6,7 @@
 typedef enum
 {
     TOKEN_EOF = 0,
-    // Single-character tokens.
+    /* single-character tokens */
     TOKEN_LPAREN,   TOKEN_RPAREN,
     TOKEN_LBRACE,   TOKEN_RBRACE,
     TOKEN_LBRACKET, TOKEN_RBRACKET,
@@ -18,21 +18,31 @@ typedef enum
     TOKEN_MINUS,
     TOKEN_ASTERISK,
     TOKEN_SLASH,
-    TOKEN_EXCLAMATION, 
-    TOKEN_ASSIGN,
+    TOKEN_EXCLAMATION,
 
-    // Comparison tokens.
+    /* assignment */
+    TOKEN_ASSIGN,
+    TOKEN_ADD_ASSIGN,
+    TOKEN_SUB_ASSIGN,
+    TOKEN_MULT_ASSIGN,
+    TOKEN_DIV_ASSIGN,
+
+    /* double-character tokens */
+    TOKEN_INC,
+    TOKEN_DEC,
+
+    /* comparison tokens */
     TOKEN_EQ, TOKEN_NOTEQ,
     TOKEN_LT, TOKEN_LTEQ,
     TOKEN_GT, TOKEN_GTEQ,
 
-    // Literals.
+    /* Literals */
     TOKEN_IDENTIFIER,
     TOKEN_STRING,
     TOKEN_INTEGER,
     TOKEN_FLOAT,
     
-    // Keywords.
+    /* Keywords */
     TOKEN_NULL,
     TOKEN_TRUE,
     TOKEN_FALSE,

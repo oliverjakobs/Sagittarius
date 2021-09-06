@@ -10,7 +10,7 @@
 #include "table.h"
 
 #define DEBUG_PRINT_CODE
-#define DEBUG_TRACE_EXECUTION
+// #define DEBUG_TRACE_EXECUTION
 
 #define CW_STACK_MAX 256
 
@@ -59,6 +59,6 @@ InterpretResult cw_interpret(cwRuntime* cw, const char* src);
 void    cw_push_stack(cwRuntime* cw, cwValue val);
 cwValue cw_pop_stack(cwRuntime* cw);
 void    cw_reset_stack(cwRuntime* cw);
-cwValue cw_peek_stack(cwRuntime* cw, int distance);
+cwValue cw_peek_stack(cwRuntime* cw, int distance); /* TODO: make peek return a pointer */
 
 #endif /* !CW_RUNTIME_H */
