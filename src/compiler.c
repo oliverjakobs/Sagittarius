@@ -74,44 +74,33 @@ int cw_resolve_local(cwRuntime* cw, cwToken* name)
 }
 
 /* --------------------------| writing byte code |--------------------------------------- */
-void cw_emit_byte(cwRuntime* cw, uint8_t byte)
+void cw_emit_byte(cwChunk* chunk, uint8_t byte, int line)
 {
-    if (cw->chunk->cap < cw->chunk->len + 1)
+    if (chunk->cap < chunk->len + 1)
     {
-        int old_cap = cw->chunk->cap;
-        cw->chunk->cap = CW_GROW_CAPACITY(old_cap);
-        cw->chunk->bytes = CW_GROW_ARRAY(uint8_t, cw->chunk->bytes, old_cap, cw->chunk->cap);
-        cw->chunk->lines = CW_GROW_ARRAY(int, cw->chunk->lines, old_cap, cw->chunk->cap);
+        int old_cap = chunk->cap;
+        chunk->cap = CW_GROW_CAPACITY(old_cap);
+        chunk->bytes = CW_GROW_ARRAY(uint8_t, chunk->bytes, old_cap, chunk->cap);
+        chunk->lines = CW_GROW_ARRAY(int,     chunk->lines, old_cap, chunk->cap);
     }
 
-    cw->chunk->bytes[cw->chunk->len] = byte;
-    cw->chunk->lines[cw->chunk->len] = cw->previous.line;
-    cw->chunk->len++;
+    chunk->bytes[chunk->len] = byte;
+    chunk->lines[chunk->len] = line;
+    chunk->len++;
 }
 
-void cw_emit_bytes(cwRuntime* cw, uint8_t a, uint8_t b)
+void cw_emit_bytes(cwChunk* chunk, uint8_t a, uint8_t b, int line)
 {
-    cw_emit_byte(cw, a);
-    cw_emit_byte(cw, b);
+    cw_emit_byte(chunk, a, line);
+    cw_emit_byte(chunk, b, line);
 }
 
-int cw_emit_jump(cwRuntime* cw, uint8_t instruction)
+int cw_emit_jump(cwChunk* chunk, uint8_t instruction, int line)
 {
-    cw_emit_byte(cw, instruction);
-    cw_emit_byte(cw, 0xff);
-    cw_emit_byte(cw, 0xff);
-    return cw->chunk->len - 2;
-}
-
-void cw_emit_loop(cwRuntime* cw, int start)
-{
-    cw_emit_byte(cw, OP_LOOP);
-
-    int offset = cw->chunk->len - start + 2;
-    if (offset > UINT16_MAX) cw_syntax_error_at(cw, &cw->previous, "Loop body too large.");
-
-    cw_emit_byte(cw, (offset >> 8) & 0xff);
-    cw_emit_byte(cw, offset & 0xff);
+    cw_emit_byte(chunk, instruction, line);
+    cw_emit_byte(chunk, 0xff, line);
+    cw_emit_byte(chunk, 0xff, line);
+    return chunk->len - 2;
 }
 
 void cw_patch_jump(cwRuntime* cw, int offset)
@@ -125,10 +114,21 @@ void cw_patch_jump(cwRuntime* cw, int offset)
     cw->chunk->bytes[offset + 1] = jump & 0xff;
 }
 
+void cw_emit_loop(cwRuntime* cw, int start)
+{
+    cw_emit_byte(cw->chunk, OP_LOOP, cw->previous.line);
+
+    int offset = cw->chunk->len - start + 2;
+    if (offset > UINT16_MAX) cw_syntax_error_at(cw, &cw->previous, "Loop body too large.");
+
+    cw_emit_byte(cw->chunk, (offset >> 8) & 0xff, cw->previous.line);
+    cw_emit_byte(cw->chunk, offset & 0xff, cw->previous.line);
+}
+
 /* --------------------------| compiling |----------------------------------------------- */
 static void cw_compiler_end(cwRuntime* cw)
 {
-    cw_emit_byte(cw, OP_RETURN);
+    cw_emit_byte(cw->chunk, OP_RETURN, cw->previous.line);
 #ifdef DEBUG_PRINT_CODE
     if (!cw->error) cw_disassemble_chunk(cw->chunk, "code");
 #endif 

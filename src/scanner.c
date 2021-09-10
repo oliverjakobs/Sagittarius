@@ -40,7 +40,8 @@ static cwTokenType cw_identifier_type(const char* start, const char* stream)
 {
     switch (start[0])
     {
-    case 'a': return cw_check_keyword(start, stream, 1, "nd", TOKEN_AND);
+    case 'b': return cw_check_keyword(start, stream, 1, "reak", TOKEN_BREAK);
+    case 'c': return cw_check_keyword(start, stream, 1, "ontinue", TOKEN_CONTINUE);
     case 'd': return cw_check_keyword(start, stream, 1, "atatype", TOKEN_DATATYPE);
     case 'e': return cw_check_keyword(start, stream, 1, "lse", TOKEN_ELSE);
     case 'i': return cw_check_keyword(start, stream, 1, "f", TOKEN_IF);
@@ -56,8 +57,8 @@ static cwTokenType cw_identifier_type(const char* start, const char* stream)
         }
         break;
     case 'l': return cw_check_keyword(start, stream, 1, "et", TOKEN_LET);
+    case 'm': return cw_check_keyword(start, stream, 1, "ut", TOKEN_MUT);
     case 'n': return cw_check_keyword(start, stream, 1, "ull", TOKEN_NULL);
-    case 'o': return cw_check_keyword(start, stream, 1, "r", TOKEN_OR);
     case 'p': return cw_check_keyword(start, stream, 1, "rint", TOKEN_PRINT);
     case 'r': return cw_check_keyword(start, stream, 1, "eturn", TOKEN_RETURN);
     case 't': return cw_check_keyword(start, stream, 1, "rue", TOKEN_RETURN);
@@ -70,9 +71,9 @@ static cwTokenType cw_identifier_type(const char* start, const char* stream)
 const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line)
 {
 #define CW_TOKEN_CASE1(c, t) case c: token->type = t; cursor++; break;
-#define CW_TOKEN_CASE2(c1, t1, c2, t2) case c1:         \
-    token->type = t1; cursor++;                         \
-    if (*cursor == c2) { token->type = t2; cursor++; }  \
+#define CW_TOKEN_CASE2(c1, t1, c2, t2) case c1:             \
+    token->type = t1; cursor++;                             \
+    if (*cursor == c2) { token->type = t2; cursor++; }      \
     break;
 #define CW_TOKEN_CASE3(c1, t1, c2, t2, c3, t3) case c1:     \
     token->type = t1; cursor++;                             \
@@ -144,8 +145,10 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
     CW_TOKEN_CASE1(',', TOKEN_COMMA)
     CW_TOKEN_CASE1(':', TOKEN_COLON)
     CW_TOKEN_CASE1(';', TOKEN_SEMICOLON)
+    CW_TOKEN_CASE2('&', TOKEN_BIT_AND,  '&', TOKEN_AND)
+    CW_TOKEN_CASE2('|', TOKEN_BIT_OR,   '|', TOKEN_OR)
     CW_TOKEN_CASE3('-', TOKEN_MINUS,    '-', TOKEN_DEC, '=', TOKEN_SUB_ASSIGN)
-    CW_TOKEN_CASE2('+', TOKEN_PLUS,     '+', TOKEN_INC, '=', TOKEN_ADD_ASSIGN)
+    CW_TOKEN_CASE3('+', TOKEN_PLUS,     '+', TOKEN_INC, '=', TOKEN_ADD_ASSIGN)
     CW_TOKEN_CASE2('/', TOKEN_SLASH,    '=', TOKEN_DIV_ASSIGN)
     CW_TOKEN_CASE2('*', TOKEN_ASTERISK, '=', TOKEN_MULT_ASSIGN)
     CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION,  '=', TOKEN_NOTEQ)
@@ -162,6 +165,7 @@ const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int
 
 #undef CW_TOKEN_CASE1
 #undef CW_TOKEN_CASE2
+#undef CW_TOKEN_CASE3
 }
 
 int cw_token_get_base(const cwToken* token)

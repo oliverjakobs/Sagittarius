@@ -26,9 +26,9 @@ typedef enum
 typedef struct
 {
     cwValueType type;
+    bool mut;
     union
     {
-        bool boolean;
         int32_t ival;
         float fval;
         cwObject* object;
@@ -46,16 +46,16 @@ static inline bool cw_is_number(cwValue val) { return val.type > VAL_NULL && val
 static inline int32_t cw_valtoi(cwValue val) { return IS_FLOAT(val) ? (int32_t)val.as.fval : val.as.ival; }
 static inline float   cw_valtof(cwValue val) { return IS_FLOAT(val) ? val.as.fval : (float)val.as.ival; }
 
-#define AS_BOOL(value)    ((value).as.boolean)
+#define AS_BOOL(value)    ((value).as.ival)
 #define AS_INT(value)     (cw_valtoi(value))
 #define AS_FLOAT(value)   (cw_valtof(value))
 #define AS_OBJECT(value)  ((value).as.object)
 
-#define MAKE_NULL(val)    ((cwValue){ .type = VAL_NULL,   { .ival = 0 }})
-#define MAKE_BOOL(val)    ((cwValue){ .type = VAL_BOOL,   { .boolean = val }})
-#define MAKE_INT(val)     ((cwValue){ .type = VAL_INT,    { .ival = val }})
-#define MAKE_FLOAT(val)   ((cwValue){ .type = VAL_FLOAT,  { .fval = val }})
-#define MAKE_OBJECT(obj)  ((cwValue){ .type = VAL_OBJECT, { .object = (cwObject*)obj }})
+#define MAKE_NULL(val)    ((cwValue){ .type = VAL_NULL,   .mut = false, { .ival = 0 }})
+#define MAKE_BOOL(val)    ((cwValue){ .type = VAL_BOOL,   .mut = false, { .ival = val }})
+#define MAKE_INT(val)     ((cwValue){ .type = VAL_INT,    .mut = false, { .ival = val }})
+#define MAKE_FLOAT(val)   ((cwValue){ .type = VAL_FLOAT,  .mut = false, { .fval = val }})
+#define MAKE_OBJECT(obj)  ((cwValue){ .type = VAL_OBJECT, .mut = false, { .object = (cwObject*)obj }})
 
 cwValue* cw_value_add(cwValue* a, const cwValue* b);
 cwValue* cw_value_sub(cwValue* a, const cwValue* b);

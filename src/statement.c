@@ -6,7 +6,7 @@
 #include "runtime.h"
 
 /* --------------------------| declarations |-------------------------------------------- */
-static void cw_parse_decl_var(cwRuntime* cw)
+static void cw_parse_decl_var(cwRuntime* cw, bool mut)
 {
     /* parse variable name */
     cw_consume(cw, TOKEN_IDENTIFIER, "Expect variable name.");
@@ -38,12 +38,13 @@ static void cw_parse_decl_var(cwRuntime* cw)
     if (cw->scope_depth > 0)
         cw->locals[cw->local_count - 1].depth = cw->scope_depth; /* mark initialized */
     else
-        cw_emit_bytes(cw, OP_DEF_GLOBAL, id);
+        cw_emit_bytes(cw->chunk, OP_DEF_GLOBAL, id, cw->previous.line);
 }
 
 int cw_parse_declaration(cwRuntime* cw)
 {
-    if (cw_match(cw, TOKEN_LET))    cw_parse_decl_var(cw);
+    if (cw_match(cw, TOKEN_LET))    cw_parse_decl_var(cw, false);
+    if (cw_match(cw, TOKEN_MUT))    cw_parse_decl_var(cw, true);
     else                            cw_parse_statement(cw); 
 
     if (cw->panic) cw_parser_synchronize(cw);
@@ -60,7 +61,7 @@ static inline void cw_end_scope(cwRuntime* cw)
     /* pop locals */
     while (cw->local_count > 0 && cw->locals[cw->local_count - 1].depth > cw->scope_depth)
     {
-        cw_emit_byte(cw, OP_POP);
+        cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
         cw->local_count--;
     }
 }
@@ -69,7 +70,7 @@ static int cw_parse_stmt_expr(cwRuntime* cw)
 {
     cw_parse_expression(cw);
     cw_consume(cw, TOKEN_SEMICOLON, "Expect terminator after expression.");
-    cw_emit_byte(cw, OP_POP);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 }
 
 static int cw_parse_stmt_block(cwRuntime* cw)
@@ -89,14 +90,14 @@ static int cw_parse_stmt_if(cwRuntime* cw)
     cw_parse_expression(cw);
     cw_consume(cw, TOKEN_RPAREN, "Expect ')' after condition.");
 
-    int then_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
-    cw_emit_byte(cw, OP_POP);
+    int then_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
     cw_parse_statement(cw);
 
-    int else_jump = cw_emit_jump(cw, OP_JUMP);
+    int else_jump = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
 
     cw_patch_jump(cw, then_jump);
-    cw_emit_byte(cw, OP_POP);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 
     if (cw_match(cw, TOKEN_ELSE)) cw_parse_statement(cw);
     cw_patch_jump(cw, else_jump);
@@ -112,13 +113,13 @@ static int cw_parse_stmt_while(cwRuntime* cw)
     cw_parse_expression(cw);
     cw_consume(cw, TOKEN_RPAREN, "Expect ')' after condition.");
 
-    int exit_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
-    cw_emit_byte(cw, OP_POP);
+    int exit_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
     cw_parse_statement(cw);
     cw_emit_loop(cw, loop_start);
 
     cw_patch_jump(cw, exit_jump);
-    cw_emit_byte(cw, OP_POP);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 }
 
 /* NOTE: maybe switch to "for x in ..." notation */
@@ -129,7 +130,8 @@ static int cw_parse_stmt_for(cwRuntime* cw)
 
     /* initializer clause. */
     if (cw_match(cw, TOKEN_SEMICOLON))  { } /* no initializer. */
-    else if (cw_match(cw, TOKEN_LET))   cw_parse_decl_var(cw);
+    else if (cw_match(cw, TOKEN_LET))   cw_parse_decl_var(cw, false);
+    else if (cw_match(cw, TOKEN_MUT))   cw_parse_decl_var(cw, true);
     else                                cw_parse_stmt_expr(cw);
 
     int loop_start = cw->chunk->len;
@@ -142,17 +144,17 @@ static int cw_parse_stmt_for(cwRuntime* cw)
         cw_consume(cw, TOKEN_SEMICOLON, "Expect ';' after loop condition.");
 
         /* jump out of the loop if the condition is false. */
-        exit_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
-        cw_emit_byte(cw, OP_POP); /* pop condition. */
+        exit_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
+        cw_emit_byte(cw->chunk, OP_POP, cw->previous.line); /* pop condition. */
     }
     
     /* increment clause. */
     if (!cw_match(cw, TOKEN_RPAREN))
     {
-        int body_jump = cw_emit_jump(cw, OP_JUMP);
+        int body_jump = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
         int inc_start = cw->chunk->len;
         cw_parse_expression(cw);
-        cw_emit_byte(cw, OP_POP);
+        cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
         cw_consume(cw, TOKEN_RPAREN, "Expect ')' after for clauses.");
 
         cw_emit_loop(cw, loop_start);
@@ -167,7 +169,7 @@ static int cw_parse_stmt_for(cwRuntime* cw)
     if (exit_jump > 0)
     {
         cw_patch_jump(cw, exit_jump);
-        cw_emit_byte(cw, OP_POP); /* pop condition. */
+        cw_emit_byte(cw->chunk, OP_POP, cw->previous.line); /* pop condition. */
     }
 
     cw_end_scope(cw);
@@ -178,7 +180,7 @@ static int cw_parse_stmt_print(cwRuntime* cw)
 {
     cw_parse_expression(cw);
     cw_consume(cw, TOKEN_SEMICOLON, "Expect terminator after value.");
-    cw_emit_byte(cw, OP_PRINT);
+    cw_emit_byte(cw->chunk, OP_PRINT, cw->previous.line);
 }
 
 /* NOTE: implement error handling in stmts */

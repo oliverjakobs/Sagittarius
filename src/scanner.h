@@ -28,8 +28,9 @@ typedef enum
     TOKEN_DIV_ASSIGN,
 
     /* double-character tokens */
-    TOKEN_INC,
-    TOKEN_DEC,
+    TOKEN_INC,      TOKEN_DEC,
+    TOKEN_BIT_AND,  TOKEN_BIT_OR,
+    TOKEN_AND,      TOKEN_OR,
 
     /* comparison tokens */
     TOKEN_EQ, TOKEN_NOTEQ,
@@ -46,13 +47,14 @@ typedef enum
     TOKEN_NULL,
     TOKEN_TRUE,
     TOKEN_FALSE,
-    TOKEN_AND,
-    TOKEN_OR,
     TOKEN_IF,
     TOKEN_ELSE,
     TOKEN_WHILE,
     TOKEN_FOR,
+    TOKEN_CONTINUE,
+    TOKEN_BREAK,
     TOKEN_LET,
+    TOKEN_MUT,
     TOKEN_FUNC,
     TOKEN_DATATYPE,
     TOKEN_RETURN,

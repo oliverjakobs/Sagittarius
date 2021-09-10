@@ -42,6 +42,8 @@ ParseRule rules[] = {
     [TOKEN_SLASH]       = { NULL,               cw_parse_binary,    PREC_FACTOR },
     [TOKEN_EXCLAMATION] = { cw_parse_unary,     NULL,               PREC_NONE },
     [TOKEN_ASSIGN]      = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_AND]         = { NULL,               cw_parse_and,       PREC_AND },
+    [TOKEN_OR]          = { NULL,               cw_parse_or,        PREC_OR },
     // Comparison tokens.
     [TOKEN_EQ]          = { NULL,               cw_parse_binary,    PREC_EQUALITY },
     [TOKEN_NOTEQ]       = { NULL,               cw_parse_binary,    PREC_EQUALITY },
@@ -58,8 +60,6 @@ ParseRule rules[] = {
     [TOKEN_NULL]        = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_TRUE]        = { cw_parse_literal,   NULL,               PREC_NONE },
     [TOKEN_FALSE]       = { cw_parse_literal,   NULL,               PREC_NONE },
-    [TOKEN_AND]         = { NULL,               cw_parse_and,       PREC_AND },
-    [TOKEN_OR]          = { NULL,               cw_parse_or,        PREC_OR },
     [TOKEN_IF]          = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
@@ -102,19 +102,19 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 static void cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
     int32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
-    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_INT(value)));
+    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_INT(value)), cw->previous.line);
 }
 
 static void cw_parse_float(cwRuntime* cw, bool can_assign)
 {
     float value = strtod(cw->previous.start, NULL);
-    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_FLOAT(value)));
+    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_FLOAT(value)), cw->previous.line);
 }
 
 static void cw_parse_string(cwRuntime* cw, bool can_assign)
 {
     cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.end - cw->previous.start - 2);
-    cw_emit_bytes(cw, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)));
+    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)), cw->previous.line);
 }
 
 static void cw_parse_grouping(cwRuntime* cw, bool can_assign)
@@ -130,8 +130,8 @@ static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 
     switch (operator)
     {
-    case TOKEN_EXCLAMATION: cw_emit_byte(cw, OP_NOT); break;
-    case TOKEN_MINUS:       cw_emit_byte(cw, OP_NEGATE); break;
+    case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT,    cw->previous.line); break;
+    case TOKEN_MINUS:       cw_emit_byte(cw->chunk, OP_NEGATE, cw->previous.line); break;
     }
 }
 
@@ -142,24 +142,24 @@ static void cw_parse_binary(cwRuntime* cw, bool can_assign)
 
     switch (operator)
     {
-    case TOKEN_EQ:        cw_emit_byte(cw, OP_EQ); break;
-    case TOKEN_NOTEQ:     cw_emit_byte(cw, OP_NOTEQ); break;
-    case TOKEN_LT:        cw_emit_byte(cw, OP_LT); break;
-    case TOKEN_LTEQ:      cw_emit_byte(cw, OP_LTEQ); break;
-    case TOKEN_GT:        cw_emit_byte(cw, OP_GT); break;
-    case TOKEN_GTEQ:      cw_emit_byte(cw, OP_GTEQ); break;
-    case TOKEN_PLUS:      cw_emit_byte(cw, OP_ADD); break;
-    case TOKEN_MINUS:     cw_emit_byte(cw, OP_SUBTRACT); break;
-    case TOKEN_ASTERISK:  cw_emit_byte(cw, OP_MULTIPLY); break;
-    case TOKEN_SLASH:     cw_emit_byte(cw, OP_DIVIDE); break;
+    case TOKEN_EQ:        cw_emit_byte(cw->chunk, OP_EQ,       cw->previous.line); break;
+    case TOKEN_NOTEQ:     cw_emit_byte(cw->chunk, OP_NOTEQ,    cw->previous.line); break;
+    case TOKEN_LT:        cw_emit_byte(cw->chunk, OP_LT,       cw->previous.line); break;
+    case TOKEN_LTEQ:      cw_emit_byte(cw->chunk, OP_LTEQ,     cw->previous.line); break;
+    case TOKEN_GT:        cw_emit_byte(cw->chunk, OP_GT,       cw->previous.line); break;
+    case TOKEN_GTEQ:      cw_emit_byte(cw->chunk, OP_GTEQ,     cw->previous.line); break;
+    case TOKEN_PLUS:      cw_emit_byte(cw->chunk, OP_ADD,      cw->previous.line); break;
+    case TOKEN_MINUS:     cw_emit_byte(cw->chunk, OP_SUBTRACT, cw->previous.line); break;
+    case TOKEN_ASTERISK:  cw_emit_byte(cw->chunk, OP_MULTIPLY, cw->previous.line); break;
+    case TOKEN_SLASH:     cw_emit_byte(cw->chunk, OP_DIVIDE,   cw->previous.line); break;
     }
 }
 
 static void cw_parse_and(cwRuntime* cw, bool can_assign)
 {
-    int end_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
+    int end_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
 
-    cw_emit_byte(cw, OP_POP);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
     cw_parse_precedence(cw, PREC_AND);
 
     cw_patch_jump(cw, end_jump);
@@ -167,11 +167,11 @@ static void cw_parse_and(cwRuntime* cw, bool can_assign)
 
 static void cw_parse_or(cwRuntime* cw, bool can_assign)
 {
-    int else_jump = cw_emit_jump(cw, OP_JUMP_IF_FALSE);
-    int end_jump  = cw_emit_jump(cw, OP_JUMP);
+    int else_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
+    int end_jump  = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
 
     cw_patch_jump(cw, else_jump);
-    cw_emit_byte(cw, OP_POP);
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 
     cw_parse_precedence(cw, PREC_OR);
     cw_patch_jump(cw, end_jump);
@@ -181,9 +181,9 @@ static void cw_parse_literal(cwRuntime* cw, bool can_assign)
 {
     switch (cw->previous.type)
     {
-    case TOKEN_FALSE: cw_emit_byte(cw, OP_FALSE); break;
-    case TOKEN_NULL:  cw_emit_byte(cw, OP_NULL); break;
-    case TOKEN_TRUE:  cw_emit_byte(cw, OP_TRUE); break;
+    case TOKEN_FALSE: cw_emit_byte(cw->chunk, OP_FALSE, cw->previous.line); break;
+    case TOKEN_NULL:  cw_emit_byte(cw->chunk, OP_NULL, cw->previous.line); break;
+    case TOKEN_TRUE:  cw_emit_byte(cw->chunk, OP_TRUE, cw->previous.line); break;
     }
 }
 
@@ -206,11 +206,11 @@ static void cw_parse_variable(cwRuntime* cw, bool can_assign)
     if (can_assign && cw_match(cw, TOKEN_ASSIGN))
     {
         cw_parse_expression(cw);
-        cw_emit_bytes(cw, set_op, (uint8_t)arg);
+        cw_emit_bytes(cw->chunk, set_op, (uint8_t)arg, cw->previous.line);
     }
     else 
     {
-        cw_emit_bytes(cw, get_op, (uint8_t)arg);
+        cw_emit_bytes(cw->chunk, get_op, (uint8_t)arg, cw->previous.line);
     }
 }
 
