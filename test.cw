@@ -1,3 +1,1 @@
-for (mut i = 0.2; i < 4; i = i + 1) 
-    print i;
-
+4 + 8

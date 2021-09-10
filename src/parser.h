@@ -18,6 +18,8 @@ typedef enum
     PREC_PRIMARY
 } Precedence;
 
+int cw_parse_expression(cwRuntime* cw);
+
 void cw_parse_precedence(cwRuntime* cw, Precedence precedence);
 
 /* utility */

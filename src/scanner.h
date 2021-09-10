@@ -57,8 +57,7 @@ typedef enum
     TOKEN_MUT,
     TOKEN_FUNC,
     TOKEN_DATATYPE,
-    TOKEN_RETURN,
-    TOKEN_PRINT
+    TOKEN_RETURN
 } cwTokenType;
 
 typedef enum
@@ -78,7 +77,7 @@ struct cwToken
     int line;
 };
 
-const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line);
+const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line, int* error);
 
 int cw_token_get_base(const cwToken* token);
 

@@ -1,9 +1,13 @@
 #include "parser.h"
 
-#include "statement.h"
-
 #include "debug.h"
 #include "runtime.h"
+
+int cw_parse_expression(cwRuntime* cw)
+{
+    cw_parse_precedence(cw, PREC_ASSIGNMENT);
+    return 1;
+}
 
 /* --------------------------| parse rules |--------------------------------------------- */
 typedef void (*ParseCallback)(cwRuntime* cw, bool can_assign);
@@ -57,9 +61,9 @@ ParseRule rules[] = {
     [TOKEN_INTEGER]     = { cw_parse_integer,   NULL,               PREC_NONE },
     [TOKEN_FLOAT]       = { cw_parse_float,     NULL,               PREC_NONE },
     // Keywords.
-    [TOKEN_NULL]        = { cw_parse_literal,   NULL,               PREC_NONE },
-    [TOKEN_TRUE]        = { cw_parse_literal,   NULL,               PREC_NONE },
-    [TOKEN_FALSE]       = { cw_parse_literal,   NULL,               PREC_NONE },
+    [TOKEN_NULL]        = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_TRUE]        = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_FALSE]       = { NULL,               NULL,               PREC_NONE },
     [TOKEN_IF]          = { NULL,               NULL,               PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
@@ -68,7 +72,6 @@ ParseRule rules[] = {
     [TOKEN_FUNC]        = { NULL,               NULL,               PREC_NONE },
     [TOKEN_DATATYPE]    = { NULL,               NULL,               PREC_NONE },
     [TOKEN_RETURN]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_PRINT]       = { NULL,               NULL,               PREC_NONE },
 };
 
 void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
@@ -78,7 +81,7 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 
     if (!prefix_rule)
     {
-        cw_syntax_error_at(cw, &cw->previous, "Expect expression");
+        cw_syntax_error_at(&cw->previous, "Expect expression");
         return;
     }
 
@@ -94,7 +97,7 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 
     if (can_assign && cw_match(cw, TOKEN_ASSIGN))
     {
-        cw_syntax_error_at(cw, &cw->previous, "Invalid assignment target.");
+        cw_syntax_error_at(&cw->previous, "Invalid assignment target.");
     }
 }
 
@@ -102,20 +105,24 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 static void cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
     int32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
-    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_INT(value)), cw->previous.line);
+    cw_emit_bytes(cw->chunk, OP_PUSH, cw_make_constant(cw, CW_MAKE_INT(value)), cw->previous.line);
 }
+
 
 static void cw_parse_float(cwRuntime* cw, bool can_assign)
 {
-    float value = strtod(cw->previous.start, NULL);
-    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_FLOAT(value)), cw->previous.line);
 }
 
 static void cw_parse_string(cwRuntime* cw, bool can_assign)
 {
-    cwString* value = cw_str_copy(cw, cw->previous.start + 1, cw->previous.end - cw->previous.start - 2);
-    cw_emit_bytes(cw->chunk, OP_CONSTANT, cw_make_constant(cw, MAKE_OBJECT(value)), cw->previous.line);
+
 }
+
+static void cw_parse_variable(cwRuntime* cw, bool can_assign)
+{
+
+}
+
 
 static void cw_parse_grouping(cwRuntime* cw, bool can_assign)
 {
@@ -130,8 +137,8 @@ static void cw_parse_unary(cwRuntime* cw, bool can_assign)
 
     switch (operator)
     {
-    case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT,    cw->previous.line); break;
-    case TOKEN_MINUS:       cw_emit_byte(cw->chunk, OP_NEGATE, cw->previous.line); break;
+    case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT, cw->previous.line); break;
+    case TOKEN_MINUS:       cw_emit_byte(cw->chunk, OP_NEG, cw->previous.line); break;
     }
 }
 
@@ -142,16 +149,16 @@ static void cw_parse_binary(cwRuntime* cw, bool can_assign)
 
     switch (operator)
     {
-    case TOKEN_EQ:        cw_emit_byte(cw->chunk, OP_EQ,       cw->previous.line); break;
-    case TOKEN_NOTEQ:     cw_emit_byte(cw->chunk, OP_NOTEQ,    cw->previous.line); break;
-    case TOKEN_LT:        cw_emit_byte(cw->chunk, OP_LT,       cw->previous.line); break;
-    case TOKEN_LTEQ:      cw_emit_byte(cw->chunk, OP_LTEQ,     cw->previous.line); break;
-    case TOKEN_GT:        cw_emit_byte(cw->chunk, OP_GT,       cw->previous.line); break;
-    case TOKEN_GTEQ:      cw_emit_byte(cw->chunk, OP_GTEQ,     cw->previous.line); break;
-    case TOKEN_PLUS:      cw_emit_byte(cw->chunk, OP_ADD,      cw->previous.line); break;
-    case TOKEN_MINUS:     cw_emit_byte(cw->chunk, OP_SUBTRACT, cw->previous.line); break;
-    case TOKEN_ASTERISK:  cw_emit_byte(cw->chunk, OP_MULTIPLY, cw->previous.line); break;
-    case TOKEN_SLASH:     cw_emit_byte(cw->chunk, OP_DIVIDE,   cw->previous.line); break;
+    case TOKEN_EQ:        cw_emit_byte(cw->chunk, OP_EQ,    cw->previous.line); break;
+    case TOKEN_NOTEQ:     cw_emit_byte(cw->chunk, OP_NOTEQ, cw->previous.line); break;
+    case TOKEN_LT:        cw_emit_byte(cw->chunk, OP_LT,    cw->previous.line); break;
+    case TOKEN_LTEQ:      cw_emit_byte(cw->chunk, OP_LTEQ,  cw->previous.line); break;
+    case TOKEN_GT:        cw_emit_byte(cw->chunk, OP_GT,    cw->previous.line); break;
+    case TOKEN_GTEQ:      cw_emit_byte(cw->chunk, OP_GTEQ,  cw->previous.line); break;
+    case TOKEN_PLUS:      cw_emit_byte(cw->chunk, OP_ADD,   cw->previous.line); break;
+    case TOKEN_MINUS:     cw_emit_byte(cw->chunk, OP_SUB,   cw->previous.line); break;
+    case TOKEN_ASTERISK:  cw_emit_byte(cw->chunk, OP_MUL,   cw->previous.line); break;
+    case TOKEN_SLASH:     cw_emit_byte(cw->chunk, OP_DIV,   cw->previous.line); break;
     }
 }
 
@@ -177,60 +184,24 @@ static void cw_parse_or(cwRuntime* cw, bool can_assign)
     cw_patch_jump(cw, end_jump);
 }
 
-static void cw_parse_literal(cwRuntime* cw, bool can_assign)
-{
-    switch (cw->previous.type)
-    {
-    case TOKEN_FALSE: cw_emit_byte(cw->chunk, OP_FALSE, cw->previous.line); break;
-    case TOKEN_NULL:  cw_emit_byte(cw->chunk, OP_NULL, cw->previous.line); break;
-    case TOKEN_TRUE:  cw_emit_byte(cw->chunk, OP_TRUE, cw->previous.line); break;
-    }
-}
-
-static void cw_parse_variable(cwRuntime* cw, bool can_assign)
-{
-    uint8_t get_op, set_op;
-    int arg = cw_resolve_local(cw, &cw->previous);
-    if (arg >= 0)
-    {
-        get_op = OP_GET_LOCAL;
-        set_op = OP_SET_LOCAL;
-    }
-    else
-    {
-        arg = cw_identifier_constant(cw, &cw->previous);
-        get_op = OP_GET_GLOBAL;
-        set_op = OP_SET_GLOBAL;
-    }
-
-    if (can_assign && cw_match(cw, TOKEN_ASSIGN))
-    {
-        cw_parse_expression(cw);
-        cw_emit_bytes(cw->chunk, set_op, (uint8_t)arg, cw->previous.line);
-    }
-    else 
-    {
-        cw_emit_bytes(cw->chunk, get_op, (uint8_t)arg, cw->previous.line);
-    }
-}
-
 /* --------------------------| utility |------------------------------------------------- */
 void cw_advance(cwRuntime* cw)
 {
     cw->previous = cw->current;
     const char* cursor = cw->previous.end;
     int line = cw->previous.line;
-    while (true)
+    int error = 0;
+    while (cursor)
     {
-        cursor = cw_scan_token(cw, &cw->current, cursor, line);
-        if (!cw->error) break;
+        cursor = cw_scan_token(cw, &cw->current, cursor, line, &error);
+        if (!error) break;
     }
 }
 
 void cw_consume(cwRuntime* cw, cwTokenType type, const char* message)
 {
     if (cw->current.type == type)   cw_advance(cw);
-    else                            cw_syntax_error_at(cw, &cw->current, message);
+    else                            cw_syntax_error_at(&cw->current, message);
 }
 
 bool cw_match(cwRuntime* cw, cwTokenType type)
@@ -238,28 +209,4 @@ bool cw_match(cwRuntime* cw, cwTokenType type)
     if (cw->current.type != type) return false;
     cw_advance(cw);
     return true;
-}
-
-void cw_parser_synchronize(cwRuntime* cw)
-{
-    cw->panic = false;
-
-    while (cw->current.type != TOKEN_EOF)
-    {
-        if (cw->previous.type == TOKEN_SEMICOLON) return;
-        switch (cw->current.type)
-        {
-        case TOKEN_IF:
-        case TOKEN_FOR:
-        case TOKEN_WHILE:
-        case TOKEN_LET:
-        case TOKEN_FUNC:
-        case TOKEN_DATATYPE: 
-        case TOKEN_RETURN:
-        case TOKEN_PRINT:
-            return;
-        }
-
-        cw_advance(cw);
-    }
 }
