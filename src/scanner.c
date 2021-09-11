@@ -179,3 +179,9 @@ int cw_token_get_base(const cwToken* token)
     default:           return 10;
     }
 }
+
+
+int cw_tokentype_numeric(cwTokenType type)
+{
+    return type == TOKEN_INTEGER || type == TOKEN_FLOAT || type == TOKEN_FALSE || type == TOKEN_TRUE;
+}

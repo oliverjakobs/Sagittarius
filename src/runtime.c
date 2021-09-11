@@ -47,43 +47,51 @@ static InterpretResult cw_run(cwRuntime* cw)
                 break;
             }
             case OP_POP:    cw_pop_stack(cw); break;
-            case OP_ADD:
+            case OP_ADD_I:
             {
-                if (!cw_value_add(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0)))
-                {
-                    cw_runtime_error(cw, "Operands must be two numbers or two strings.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
+                cw_value_add(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_INT);
                 cw_pop_stack(cw);
                 break;
             }
-            case OP_SUB:
+            case OP_SUB_I:
             {
-                if (!cw_value_sub(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0)))
-                {
-                    cw_runtime_error(cw, "Operands must be two numbers or two strings.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
+                cw_value_sub(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_INT);
                 cw_pop_stack(cw);
                 break;
             }
-            case OP_MUL:
+            case OP_MUL_I:
             {
-                if (!cw_value_mul(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0)))
-                {
-                    cw_runtime_error(cw, "Operands must be two numbers or two strings.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
+                cw_value_mul(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_INT);
                 cw_pop_stack(cw);
                 break;
             }
-            case OP_DIV:
+            case OP_DIV_I:
             {
-                if (!cw_value_div(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0)))
-                {
-                    cw_runtime_error(cw, "Operands must be two numbers or two strings.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
+                cw_value_div(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_INT);
+                cw_pop_stack(cw);
+                break;
+            }
+            case OP_ADD_F:
+            {
+                cw_value_add(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_FLOAT);
+                cw_pop_stack(cw);
+                break;
+            }
+            case OP_SUB_F:
+            {
+                cw_value_sub(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_FLOAT);
+                cw_pop_stack(cw);
+                break;
+            }
+            case OP_MUL_F:
+            {
+                cw_value_mul(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_FLOAT);
+                cw_pop_stack(cw);
+                break;
+            }
+            case OP_DIV_F:
+            {
+                cw_value_div(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), CW_VALUE_FLOAT);
                 cw_pop_stack(cw);
                 break;
             }
@@ -91,6 +99,9 @@ static InterpretResult cw_run(cwRuntime* cw)
                 cw_print_value(cw_pop_stack(cw));
                 printf("\n");
                 return INTERPRET_OK;
+            default:
+                cw_runtime_error(cw, "Unknown instruction %d", instruction);
+                return INTERPRET_RUNTIME_ERROR;
         }
     }
 

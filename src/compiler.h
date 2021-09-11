@@ -3,13 +3,17 @@
 
 #include "scanner.h"
 
+#define OP_MOD_FLOAT 1
+
 typedef enum
 {
     OP_PUSH,
     OP_POP,
     /* arithmetic operations */
-    OP_ADD, OP_SUB,
-    OP_MUL, OP_DIV,
+    OP_ADD_I = 1 << 3, OP_ADD_F = OP_ADD_I | OP_MOD_FLOAT, 
+    OP_SUB_I = 1 << 4, OP_SUB_F = OP_SUB_I | OP_MOD_FLOAT,
+    OP_MUL_I = 1 << 5, OP_MUL_F = OP_MUL_I | OP_MOD_FLOAT,
+    OP_DIV_I = 1 << 6, OP_DIV_F = OP_DIV_I | OP_MOD_FLOAT,
     OP_NEG,
     OP_NOT,
     /* comparison operations */

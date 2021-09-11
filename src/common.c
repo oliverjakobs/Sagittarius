@@ -6,27 +6,43 @@
 #include <string.h>
 #include <math.h>
 
-cwValue* cw_value_add(cwValue* a, const cwValue* b)
+cwValue* cw_value_add(cwValue* a, const cwValue* b, cwValueType result_type)
 {
-    a->ival += b->ival;
+    if (result_type == CW_VALUE_FLOAT)
+        a->fval = cw_valtof(*a) + cw_valtof(*b);
+    else
+        a->ival += b->ival;
+    a->type = result_type;
     return a;
 }
 
-cwValue* cw_value_sub(cwValue* a, const cwValue* b)
+cwValue* cw_value_sub(cwValue* a, const cwValue* b, cwValueType result_type)
 {
-    a->ival -= b->ival;
+    if (result_type == CW_VALUE_FLOAT)
+        a->fval = cw_valtof(*a) - cw_valtof(*b);
+    else
+        a->ival -= b->ival;
+    a->type = result_type;
     return a;
 }
 
-cwValue* cw_value_mul(cwValue* a, const cwValue* b)
+cwValue* cw_value_mul(cwValue* a, const cwValue* b, cwValueType result_type)
 {
-    a->ival *= b->ival;
+    if (result_type == CW_VALUE_FLOAT)
+        a->fval = cw_valtof(*a) * cw_valtof(*b);
+    else
+        a->ival *= b->ival;
+    a->type = result_type;
     return a;
 }
 
-cwValue* cw_value_div(cwValue* a, const cwValue* b)
+cwValue* cw_value_div(cwValue* a, const cwValue* b, cwValueType result_type)
 {
-    a->ival /= b->ival;
+    if (result_type == CW_VALUE_FLOAT)
+        a->fval = cw_valtof(*a) / cw_valtof(*b);
+    else
+        a->ival /= b->ival;
+    a->type = result_type;
     return a;
 }
 
