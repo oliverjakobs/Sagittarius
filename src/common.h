@@ -37,10 +37,15 @@ static inline cwValueType cw_valuetype_max(cwValueType a, cwValueType b) { retur
 static inline int32_t cw_valtoi(cwValue val) { return val.type == CW_VALUE_FLOAT ? (int32_t)val.fval : val.ival; }
 static inline float   cw_valtof(cwValue val) { return val.type == CW_VALUE_FLOAT ? val.fval : (float)val.ival; }
 
+int cw_value_cmp(cwValue a, cwValue b);
+int cw_value_is_falsey(const cwValue* val);
+
 cwValue* cw_value_add(cwValue* a, const cwValue* b, cwValueType result_type);
 cwValue* cw_value_sub(cwValue* a, const cwValue* b, cwValueType result_type);
 cwValue* cw_value_mul(cwValue* a, const cwValue* b, cwValueType result_type);
 cwValue* cw_value_div(cwValue* a, const cwValue* b, cwValueType result_type);
+
+cwValue* cw_value_neg(cwValue* val);
 
 /* chunk */
 typedef struct

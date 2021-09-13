@@ -7,8 +7,7 @@
 
 cwValueType cw_parse_expression(cwRuntime* cw)
 {
-    cw_parse_precedence(cw, PREC_ASSIGNMENT);
-    return 1;
+    return cw_parse_precedence(cw, PREC_ASSIGNMENT);
 }
 
 /* --------------------------| parse rules |--------------------------------------------- */
@@ -22,60 +21,60 @@ typedef struct
     Precedence precedence;
 } ParseRule;
 
-static cwValueType cw_parse_integer(cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_float(cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_string(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_integer (cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_float   (cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_string  (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_unary(cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_literal(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_unary   (cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_literal (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign);
 
 static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_assign);
-static cwValueType cw_parse_and(cwRuntime* cw, cwValueType left, bool can_assign);
-static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign);
+static cwValueType cw_parse_and   (cwRuntime* cw, cwValueType left, bool can_assign);
+static cwValueType cw_parse_or    (cwRuntime* cw, cwValueType left, bool can_assign);
 
 ParseRule rules[] = {
-    [TOKEN_EOF]         = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,               PREC_NONE },
-    [TOKEN_RPAREN]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_LBRACE]      = { NULL,               NULL,               PREC_NONE }, 
-    [TOKEN_RBRACE]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_PERIOD]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_COMMA]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_COLON]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_SEMICOLON]   = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_PLUS]        = { NULL,               cw_parse_binary,    PREC_TERM },
-    [TOKEN_MINUS]       = { cw_parse_unary,     cw_parse_binary,    PREC_TERM },
-    [TOKEN_ASTERISK]    = { NULL,               cw_parse_binary,    PREC_FACTOR },
-    [TOKEN_SLASH]       = { NULL,               cw_parse_binary,    PREC_FACTOR },
-    [TOKEN_EXCLAMATION] = { cw_parse_unary,     NULL,               PREC_NONE },
-    [TOKEN_ASSIGN]      = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_AND]         = { NULL,               cw_parse_and,       PREC_AND },
-    [TOKEN_OR]          = { NULL,               cw_parse_or,        PREC_OR },
+    [TOKEN_EOF]         = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_LPAREN]      = { cw_parse_grouping,  NULL,             PREC_NONE },
+    [TOKEN_RPAREN]      = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_LBRACE]      = { NULL,               NULL,             PREC_NONE }, 
+    [TOKEN_RBRACE]      = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_PERIOD]      = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_COMMA]       = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_COLON]       = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_SEMICOLON]   = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_PLUS]        = { NULL,               cw_parse_binary,  PREC_TERM },
+    [TOKEN_MINUS]       = { cw_parse_unary,     cw_parse_binary,  PREC_TERM },
+    [TOKEN_ASTERISK]    = { NULL,               cw_parse_binary,  PREC_FACTOR },
+    [TOKEN_SLASH]       = { NULL,               cw_parse_binary,  PREC_FACTOR },
+    [TOKEN_EXCLAMATION] = { cw_parse_unary,     NULL,             PREC_NONE },
+    [TOKEN_ASSIGN]      = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_AND]         = { NULL,               cw_parse_and,     PREC_AND },
+    [TOKEN_OR]          = { NULL,               cw_parse_or,      PREC_OR },
     // Comparison tokens.
-    [TOKEN_EQ]          = { NULL,               cw_parse_binary,    PREC_EQUALITY },
-    [TOKEN_NOTEQ]       = { NULL,               cw_parse_binary,    PREC_EQUALITY },
-    [TOKEN_LT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
-    [TOKEN_LTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
-    [TOKEN_GT]          = { NULL,               cw_parse_binary,    PREC_COMPARISON },
-    [TOKEN_GTEQ]        = { NULL,               cw_parse_binary,    PREC_COMPARISON },
+    [TOKEN_EQ]          = { NULL,               cw_parse_binary,  PREC_EQUALITY },
+    [TOKEN_NOTEQ]       = { NULL,               cw_parse_binary,  PREC_EQUALITY },
+    [TOKEN_LT]          = { NULL,               cw_parse_binary,  PREC_COMPARISON },
+    [TOKEN_LTEQ]        = { NULL,               cw_parse_binary,  PREC_COMPARISON },
+    [TOKEN_GT]          = { NULL,               cw_parse_binary,  PREC_COMPARISON },
+    [TOKEN_GTEQ]        = { NULL,               cw_parse_binary,  PREC_COMPARISON },
     // Literals.
-    [TOKEN_IDENTIFIER]  = { cw_parse_variable,  NULL,               PREC_NONE },
-    [TOKEN_STRING]      = { cw_parse_string,    NULL,               PREC_NONE },
-    [TOKEN_INTEGER]     = { cw_parse_integer,   NULL,               PREC_NONE },
-    [TOKEN_FLOAT]       = { cw_parse_float,     NULL,               PREC_NONE },
+    [TOKEN_IDENTIFIER]  = { cw_parse_variable,  NULL,             PREC_NONE },
+    [TOKEN_STRING]      = { cw_parse_string,    NULL,             PREC_NONE },
+    [TOKEN_INTEGER]     = { cw_parse_integer,   NULL,             PREC_NONE },
+    [TOKEN_FLOAT]       = { cw_parse_float,     NULL,             PREC_NONE },
     // Keywords.
-    [TOKEN_NULL]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_TRUE]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_FALSE]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_IF]          = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_ELSE]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_WHILE]       = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_FOR]         = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_LET]         = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_FUNC]        = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_DATATYPE]    = { NULL,               NULL,               PREC_NONE },
-    [TOKEN_RETURN]      = { NULL,               NULL,               PREC_NONE },
+    [TOKEN_NULL]        = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_TRUE]        = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_FALSE]       = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_IF]          = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_ELSE]        = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_WHILE]       = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_FOR]         = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_LET]         = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_FUNC]        = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_DATATYPE]    = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_RETURN]      = { NULL,               NULL,             PREC_NONE },
 };
 
 cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
@@ -195,10 +194,10 @@ static cwValueType cw_parse_and(cwRuntime* cw, cwValueType left, bool can_assign
 
 static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign)
 {
-    int else_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
+    int or_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
     int end_jump  = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
 
-    cw_patch_jump(cw, else_jump);
+    cw_patch_jump(cw, or_jump);
     cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 
     cw_parse_precedence(cw, PREC_OR);
