@@ -32,6 +32,8 @@ typedef struct
 #define CW_MAKE_INT(val)    ((cwValue){ .type = CW_VALUE_INT,   { .ival = val }})
 #define CW_MAKE_FLOAT(val)  ((cwValue){ .type = CW_VALUE_FLOAT, { .fval = val }})
 
+static inline bool cw_valuetype_numeric(cwValueType type) { return type >= CW_VALUE_BOOL && type <= CW_VALUE_FLOAT; }
+static inline cwValueType cw_valuetype_max(cwValueType a, cwValueType b) { return a < b ? b : a; }
 static inline int32_t cw_valtoi(cwValue val) { return val.type == CW_VALUE_FLOAT ? (int32_t)val.fval : val.ival; }
 static inline float   cw_valtof(cwValue val) { return val.type == CW_VALUE_FLOAT ? val.fval : (float)val.ival; }
 

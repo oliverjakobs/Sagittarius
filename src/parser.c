@@ -3,15 +3,17 @@
 #include "debug.h"
 #include "runtime.h"
 
-int cw_parse_expression(cwRuntime* cw)
+#include <stdio.h>
+
+cwValueType cw_parse_expression(cwRuntime* cw)
 {
     cw_parse_precedence(cw, PREC_ASSIGNMENT);
     return 1;
 }
 
 /* --------------------------| parse rules |--------------------------------------------- */
-typedef void (*cwPrefixRule)(cwRuntime* cw, bool can_assign);
-typedef void (*cwInfixRule)(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign);
+typedef cwValueType (*cwPrefixRule)(cwRuntime* cw, bool can_assign);
+typedef cwValueType (*cwInfixRule)(cwRuntime* cw, cwValueType left, bool can_assign);
 
 typedef struct
 {
@@ -20,17 +22,17 @@ typedef struct
     Precedence precedence;
 } ParseRule;
 
-static void cw_parse_integer(cwRuntime* cw, bool can_assign);
-static void cw_parse_float(cwRuntime* cw, bool can_assign);
-static void cw_parse_string(cwRuntime* cw, bool can_assign);
-static void cw_parse_grouping(cwRuntime* cw, bool can_assign);
-static void cw_parse_unary(cwRuntime* cw, bool can_assign);
-static void cw_parse_literal(cwRuntime* cw, bool can_assign);
-static void cw_parse_variable(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_integer(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_float(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_string(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_unary(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_literal(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign);
 
-static void cw_parse_binary(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign);
-static void cw_parse_and(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign);
-static void cw_parse_or(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign);
+static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_assign);
+static cwValueType cw_parse_and(cwRuntime* cw, cwValueType left, bool can_assign);
+static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign);
 
 ParseRule rules[] = {
     [TOKEN_EOF]         = { NULL,               NULL,               PREC_NONE },
@@ -76,7 +78,7 @@ ParseRule rules[] = {
     [TOKEN_RETURN]      = { NULL,               NULL,               PREC_NONE },
 };
 
-void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
+cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 {
     cw_advance(cw);
     cwPrefixRule prefix_rule = rules[cw->previous.type].prefix;
@@ -84,102 +86,103 @@ void cw_parse_precedence(cwRuntime* cw, Precedence precedence)
     if (!prefix_rule)
     {
         cw_syntax_error_at(&cw->previous, "Expect expression");
-        return;
+        return CW_VALUE_NULL;
     }
 
     bool can_assign = precedence <= PREC_ASSIGNMENT;
-    prefix_rule(cw, can_assign);
+    cwValueType left = prefix_rule(cw, can_assign);
 
-    cwTokenType left = cw->previous.type;
+    cwValueType right = CW_VALUE_NULL;
     while (precedence <= rules[cw->current.type].precedence)
     {
         cw_advance(cw);
-        cwTokenType right = cw->current.type;
         cwInfixRule infix_rule = rules[cw->previous.type].infix;
-        infix_rule(cw, left, right, can_assign);
+        right = infix_rule(cw, left, can_assign);
     }
 
     if (can_assign && cw_match(cw, TOKEN_ASSIGN))
-    {
         cw_syntax_error_at(&cw->previous, "Invalid assignment target.");
-    }
+
+    return cw_valuetype_max(left, right);
 }
 
 /* --------------------------| parse callbacks |----------------------------------------- */
-static void cw_parse_integer(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
     int32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
     cw_emit_bytes(cw->chunk, OP_PUSH, cw_make_constant(cw, CW_MAKE_INT(value)), cw->previous.line);
+    return CW_VALUE_INT;
 }
 
-
-static void cw_parse_float(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_float(cwRuntime* cw, bool can_assign)
 {
     float value = strtod(cw->previous.start, NULL);
     cw_emit_bytes(cw->chunk, OP_PUSH, cw_make_constant(cw, CW_MAKE_FLOAT(value)), cw->previous.line);
+    return CW_VALUE_FLOAT;
 }
 
-static void cw_parse_string(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_string(cwRuntime* cw, bool can_assign)
 {
-
+    return CW_VALUE_NULL;
 }
 
-static void cw_parse_variable(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign)
 {
-
+    return CW_VALUE_NULL;
 }
 
-
-static void cw_parse_grouping(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign)
 {
-    cw_parse_expression(cw);
+    cwValueType return_type = cw_parse_expression(cw);
     cw_consume(cw, TOKEN_RPAREN, "Expect ')' after expression.");
+    return return_type;
 }
 
-static void cw_parse_unary(cwRuntime* cw, bool can_assign)
+static cwValueType cw_parse_unary(cwRuntime* cw, bool can_assign)
 {
     cwTokenType operator = cw->previous.type;
-    cw_parse_precedence(cw, PREC_UNARY);
+    cwValueType return_type = cw_parse_precedence(cw, PREC_UNARY);
 
     switch (operator)
     {
     case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT, cw->previous.line); break;
     case TOKEN_MINUS:       cw_emit_byte(cw->chunk, OP_NEG, cw->previous.line); break;
     }
+    return return_type;
 }
 
-static void cw_parse_binary(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign)
+static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_assign)
 {
     cwTokenType operator = cw->previous.type;
-    cw_parse_precedence(cw, (Precedence)(rules[operator].precedence + 1));
+    cwValueType right = cw_parse_precedence(cw, (Precedence)(rules[operator].precedence + 1));
 
     cwOpCode op_code = OP_RETURN;
     switch (operator)
     {
-    case TOKEN_EQ:        cw_emit_byte(cw->chunk, OP_EQ,    cw->previous.line); break;
-    case TOKEN_NOTEQ:     cw_emit_byte(cw->chunk, OP_NOTEQ, cw->previous.line); break;
-    case TOKEN_LT:        cw_emit_byte(cw->chunk, OP_LT,    cw->previous.line); break;
-    case TOKEN_LTEQ:      cw_emit_byte(cw->chunk, OP_LTEQ,  cw->previous.line); break;
-    case TOKEN_GT:        cw_emit_byte(cw->chunk, OP_GT,    cw->previous.line); break;
-    case TOKEN_GTEQ:      cw_emit_byte(cw->chunk, OP_GTEQ,  cw->previous.line); break;
-
+    /* comparsion operators */
+    case TOKEN_EQ:    cw_emit_byte(cw->chunk, OP_EQ,    cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_NOTEQ: cw_emit_byte(cw->chunk, OP_NOTEQ, cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_LT:    cw_emit_byte(cw->chunk, OP_LT,    cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_LTEQ:  cw_emit_byte(cw->chunk, OP_LTEQ,  cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_GT:    cw_emit_byte(cw->chunk, OP_GT,    cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_GTEQ:  cw_emit_byte(cw->chunk, OP_GTEQ,  cw->previous.line); return CW_VALUE_BOOL;
+    /* arithmetic operators */
     case TOKEN_PLUS:      op_code = OP_ADD_I; break;
     case TOKEN_MINUS:     op_code = OP_SUB_I; break;
     case TOKEN_ASTERISK:  op_code = OP_MUL_I; break;
     case TOKEN_SLASH:     op_code = OP_DIV_I; break;
     }
 
-    if (op_code != OP_RETURN)
-    {
-        if (!(cw_tokentype_numeric(left) && cw_tokentype_numeric(right)))
-            cw_syntax_error_at(&cw->previous, "Operands musst be numeric values.");
+    if (!(cw_valuetype_numeric(left) && cw_valuetype_numeric(right)))
+        cw_syntax_error_at(&cw->previous, "Operands musst be numeric values.");
 
-        if (left == TOKEN_FLOAT || right == TOKEN_FLOAT) op_code |= OP_MOD_FLOAT;
-        cw_emit_byte(cw->chunk, op_code, cw->previous.line);
-    }
+    if (left == CW_VALUE_FLOAT || right == CW_VALUE_FLOAT) op_code |= OP_MOD_FLOAT; 
+
+    cw_emit_byte(cw->chunk, op_code, cw->previous.line);
+    return cw_valuetype_max(left, right);
 }
 
-static void cw_parse_and(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign)
+static cwValueType cw_parse_and(cwRuntime* cw, cwValueType left, bool can_assign)
 {
     int end_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
 
@@ -187,9 +190,10 @@ static void cw_parse_and(cwRuntime* cw, cwTokenType left, cwTokenType right, boo
     cw_parse_precedence(cw, PREC_AND);
 
     cw_patch_jump(cw, end_jump);
+    return CW_VALUE_BOOL;
 }
 
-static void cw_parse_or(cwRuntime* cw, cwTokenType left, cwTokenType right, bool can_assign)
+static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign)
 {
     int else_jump = cw_emit_jump(cw->chunk, OP_JUMP_IF_FALSE, cw->previous.line);
     int end_jump  = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
@@ -199,6 +203,7 @@ static void cw_parse_or(cwRuntime* cw, cwTokenType left, cwTokenType right, bool
 
     cw_parse_precedence(cw, PREC_OR);
     cw_patch_jump(cw, end_jump);
+    return CW_VALUE_BOOL;
 }
 
 /* --------------------------| utility |------------------------------------------------- */
