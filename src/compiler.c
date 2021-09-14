@@ -101,7 +101,7 @@ bool cw_compile(cwRuntime* cw, const char* src, cwChunk* chunk)
     /* init compiler */
     cw->chunk = chunk;
 
-    cw_advance(cw);
+    cw_next_token(&cw->current, &cw->previous);
 
     while (!cw_match(cw, TOKEN_EOF))
     {

@@ -79,7 +79,7 @@ ParseRule rules[] = {
 
 cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 {
-    cw_advance(cw);
+    cw_next_token(&cw->current, &cw->previous);
     cwPrefixRule prefix_rule = rules[cw->previous.type].prefix;
 
     if (!prefix_rule)
@@ -94,7 +94,7 @@ cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
     cwValueType right = CW_VALUE_NULL;
     while (precedence <= rules[cw->current.type].precedence)
     {
-        cw_advance(cw);
+        cw_next_token(&cw->current, &cw->previous);
         cwInfixRule infix_rule = rules[cw->previous.type].infix;
         right = infix_rule(cw, left, can_assign);
     }
@@ -206,29 +206,15 @@ static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign)
 }
 
 /* --------------------------| utility |------------------------------------------------- */
-void cw_advance(cwRuntime* cw)
-{
-    cw->previous = cw->current;
-
-    const char* cursor = cw->current.end;
-    int line = cw->current.line;
-    int error = 0;
-    while (cursor)
-    {
-        cursor = cw_scan_token(cw, &cw->current, cursor, line, &error);
-        if (!error) break;
-    }
-}
-
 void cw_consume(cwRuntime* cw, cwTokenType type, const char* message)
 {
-    if (cw->current.type == type)   cw_advance(cw);
+    if (cw->current.type == type)   cw_next_token(&cw->current, &cw->previous);
     else                            cw_syntax_error_at(&cw->current, message);
 }
 
 bool cw_match(cwRuntime* cw, cwTokenType type)
 {
     if (cw->current.type != type) return false;
-    cw_advance(cw);
+    cw_next_token(&cw->current, &cw->previous);
     return true;
 }

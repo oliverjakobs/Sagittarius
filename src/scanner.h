@@ -77,7 +77,7 @@ struct cwToken
     int line;
 };
 
-const char* cw_scan_token(cwRuntime* cw, cwToken* token, const char* cursor, int line, int* error);
+void cw_next_token(cwToken* next, cwToken* prev);
 
 int cw_token_get_base(const cwToken* token);
 

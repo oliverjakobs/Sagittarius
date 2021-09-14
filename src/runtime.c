@@ -24,10 +24,18 @@ static InterpretResult cw_run(cwRuntime* cw)
 #define READ_BYTE()     (*cw->ip++)
 #define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
-#define OP_BINARY(op, return_type)                                  \
-    op(cw_peek_stack(cw, 1), cw_peek_stack(cw, 0), return_type);    \
-    cw_pop_stack(cw);                                               \
-    break
+#define OP_BINARY_INT(op) {                     \
+    cwValue b = cw_pop_stack(cw);               \
+    cwValue* a = cw_peek_stack(cw, 0);          \
+    a->ival = a->ival op b.ival;                \
+    a->type = CW_VALUE_INT;                     \
+    } break
+#define OP_BINARY_FLOAT(op) {                   \
+    cwValue b = cw_pop_stack(cw);               \
+    cwValue* a = cw_peek_stack(cw, 0);          \
+    a->fval = cw_valtof(*a) op cw_valtof(b);    \
+    a->type = CW_VALUE_FLOAT;                   \
+    } break
 #define OP_COMPARISON(op) {                                         \
         cwValue b = cw_pop_stack(cw);                               \
         cwValue a = cw_pop_stack(cw);                               \
@@ -50,27 +58,34 @@ static InterpretResult cw_run(cwRuntime* cw)
         uint8_t instruction = READ_BYTE();
         switch (instruction)
         {
-            case OP_PUSH:
+            case OP_PUSH:   cw_push_stack(cw, READ_CONSTANT()); break;
+            case OP_POP:    cw_pop_stack(cw); break;
+            case OP_ADD_I:  OP_BINARY_INT(+);
+            case OP_SUB_I:  OP_BINARY_INT(-);
+            case OP_MUL_I:  OP_BINARY_INT(*);
+            case OP_DIV_I:  OP_BINARY_INT(/);
+            case OP_ADD_F:  OP_BINARY_FLOAT(+);
+            case OP_SUB_F:  OP_BINARY_FLOAT(-);
+            case OP_MUL_F:  OP_BINARY_FLOAT(*);
+            case OP_DIV_F:  OP_BINARY_FLOAT(/);
+            case OP_NEG:
             {
-                cwValue constant = READ_CONSTANT();
-                cw_push_stack(cw, constant);
+                cwValue* val = cw_peek_stack(cw, 0);
+                if (val->type == CW_VALUE_FLOAT)  val->fval = -val->fval;
+                else                              val->ival = -val->ival;
                 break;
             }
-            case OP_POP:    cw_pop_stack(cw); break;
-            case OP_ADD_I:  OP_BINARY(cw_value_add, CW_VALUE_INT);
-            case OP_SUB_I:  OP_BINARY(cw_value_sub, CW_VALUE_INT);
-            case OP_MUL_I:  OP_BINARY(cw_value_mul, CW_VALUE_INT);
-            case OP_DIV_I:  OP_BINARY(cw_value_div, CW_VALUE_INT);
-            case OP_ADD_F:  OP_BINARY(cw_value_add, CW_VALUE_FLOAT);
-            case OP_SUB_F:  OP_BINARY(cw_value_sub, CW_VALUE_FLOAT);
-            case OP_MUL_F:  OP_BINARY(cw_value_mul, CW_VALUE_FLOAT);
-            case OP_DIV_F:  OP_BINARY(cw_value_div, CW_VALUE_FLOAT);
-            case OP_NEG:    cw_value_neg(cw_peek_stack(cw, 0)); break;
             case OP_LT:     OP_COMPARISON(<);
             case OP_LTEQ:   OP_COMPARISON(<=);
             case OP_GT:     OP_COMPARISON(>);
             case OP_GTEQ:   OP_COMPARISON(>=);
-            // case OP_NOT:    cw_push_stack(cw, CW_MAKE_BOOL(cw_is_falsey(cw_pop_stack(cw)))); break;
+            case OP_NOT:
+            {
+                cwValue* val = cw_peek_stack(cw, 0);
+                val->ival = cw_value_is_falsey(val);
+                val->type = CW_VALUE_BOOL;
+                break;
+            }
             case OP_JUMP_IF_FALSE:
             {
                 uint16_t offset = READ_SHORT();
@@ -103,7 +118,8 @@ static InterpretResult cw_run(cwRuntime* cw)
 #undef READ_BYTE
 #undef READ_SHORT
 #undef READ_CONSTANT
-#undef OP_BINARY
+#undef OP_BINARY_INT
+#undef OP_BINARY_FLOAT
 #undef OP_COMPARISON
 }
 

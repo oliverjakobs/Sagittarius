@@ -7,7 +7,7 @@
 
 typedef enum
 {
-    OP_PUSH,
+    OP_PUSH = 0,
     OP_POP,
     /* arithmetic operations */
     OP_ADD_I = 1 << 3, OP_ADD_F = OP_ADD_I | OP_MOD_FLOAT, 
@@ -24,7 +24,7 @@ typedef enum
     OP_JUMP_IF_FALSE,
     OP_JUMP,
     OP_LOOP,
-    OP_RETURN,
+    OP_RETURN = 255
 } cwOpCode;
 
 uint8_t cw_make_constant(cwRuntime* cw, cwValue value);
