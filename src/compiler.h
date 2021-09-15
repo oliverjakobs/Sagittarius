@@ -10,21 +10,24 @@ typedef enum
     OP_PUSH = 0,
     OP_POP,
     /* arithmetic operations */
-    OP_ADD_I = 1 << 3, OP_ADD_F = OP_ADD_I | OP_MOD_FLOAT, 
-    OP_SUB_I = 1 << 4, OP_SUB_F = OP_SUB_I | OP_MOD_FLOAT,
-    OP_MUL_I = 1 << 5, OP_MUL_F = OP_MUL_I | OP_MOD_FLOAT,
-    OP_DIV_I = 1 << 6, OP_DIV_F = OP_DIV_I | OP_MOD_FLOAT,
-    OP_NEG,
+    OP_ADD_I = 1 << 1, OP_ADD_F = OP_ADD_I | OP_MOD_FLOAT, 
+    OP_SUB_I = 2 << 1, OP_SUB_F = OP_SUB_I | OP_MOD_FLOAT,
+    OP_MUL_I = 3 << 1, OP_MUL_F = OP_MUL_I | OP_MOD_FLOAT,
+    OP_DIV_I = 4 << 1, OP_DIV_F = OP_DIV_I | OP_MOD_FLOAT,
+    OP_NEG_I = 5 << 1, OP_NEG_F = OP_NEG_I | OP_MOD_FLOAT,
     OP_NOT,
-    /* comparison operations */
+    /* equality operations */
     OP_EQ, OP_NOTEQ,
-    OP_LT, OP_LTEQ,
-    OP_GT, OP_GTEQ,
+    /* comparison operations */
+    OP_LT_I   = 10 << 1, OP_LT_F   = OP_LT_I   | OP_MOD_FLOAT,
+    OP_LTEQ_I = 11 << 1, OP_LTEQ_F = OP_LTEQ_I | OP_MOD_FLOAT,
+    OP_GT_I   = 12 << 1, OP_GT_F   = OP_GT_I   | OP_MOD_FLOAT,
+    OP_GTEQ_I = 13 << 1, OP_GTEQ_F = OP_GTEQ_I | OP_MOD_FLOAT,
     /* control flow operations */
     OP_JUMP_IF_FALSE,
     OP_JUMP,
     OP_LOOP,
-    OP_RETURN = 255
+    OP_RETURN
 } cwOpCode;
 
 uint8_t cw_make_constant(cwRuntime* cw, cwValue value);

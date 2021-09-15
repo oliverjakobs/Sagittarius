@@ -140,14 +140,16 @@ static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign)
 static cwValueType cw_parse_unary(cwRuntime* cw, bool can_assign)
 {
     cwTokenType operator = cw->previous.type;
-    cwValueType return_type = cw_parse_precedence(cw, PREC_UNARY);
+    cwValueType result_type = cw_parse_precedence(cw, PREC_UNARY);
 
     switch (operator)
     {
     case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT, cw->previous.line); break;
-    case TOKEN_MINUS:       cw_emit_byte(cw->chunk, OP_NEG, cw->previous.line); break;
+    case TOKEN_MINUS:       
+        cw_emit_byte(cw->chunk, result_type == CW_VALUE_FLOAT ? OP_NEG_F : OP_NEG_I, cw->previous.line); 
+        break;
     }
-    return return_type;
+    return result_type;
 }
 
 static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_assign)
@@ -158,13 +160,14 @@ static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_ass
     cwOpCode op_code = OP_RETURN;
     switch (operator)
     {
-    /* comparsion operators */
+    /* equality operators */
     case TOKEN_EQ:    cw_emit_byte(cw->chunk, OP_EQ,    cw->previous.line); return CW_VALUE_BOOL;
     case TOKEN_NOTEQ: cw_emit_byte(cw->chunk, OP_NOTEQ, cw->previous.line); return CW_VALUE_BOOL;
-    case TOKEN_LT:    cw_emit_byte(cw->chunk, OP_LT,    cw->previous.line); return CW_VALUE_BOOL;
-    case TOKEN_LTEQ:  cw_emit_byte(cw->chunk, OP_LTEQ,  cw->previous.line); return CW_VALUE_BOOL;
-    case TOKEN_GT:    cw_emit_byte(cw->chunk, OP_GT,    cw->previous.line); return CW_VALUE_BOOL;
-    case TOKEN_GTEQ:  cw_emit_byte(cw->chunk, OP_GTEQ,  cw->previous.line); return CW_VALUE_BOOL;
+    /* comparsion operators */
+    case TOKEN_LT:        op_code = OP_LT_I; break;
+    case TOKEN_LTEQ:      op_code = OP_LTEQ_I; break;
+    case TOKEN_GT:        op_code = OP_GT_I; break;
+    case TOKEN_GTEQ:      op_code = OP_GTEQ_I; break;
     /* arithmetic operators */
     case TOKEN_PLUS:      op_code = OP_ADD_I; break;
     case TOKEN_MINUS:     op_code = OP_SUB_I; break;
@@ -178,7 +181,7 @@ static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_ass
     if (left == CW_VALUE_FLOAT || right == CW_VALUE_FLOAT) op_code |= OP_MOD_FLOAT; 
 
     cw_emit_byte(cw->chunk, op_code, cw->previous.line);
-    return cw_valuetype_max(left, right);
+    return (op_code < OP_LT_I) ? cw_valuetype_max(left, right) : CW_VALUE_BOOL;
 }
 
 static cwValueType cw_parse_and(cwRuntime* cw, cwValueType left, bool can_assign)

@@ -24,22 +24,29 @@ static InterpretResult cw_run(cwRuntime* cw)
 #define READ_BYTE()     (*cw->ip++)
 #define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
-#define OP_BINARY_INT(op) {                     \
-    cwValue b = cw_pop_stack(cw);               \
-    cwValue* a = cw_peek_stack(cw, 0);          \
-    a->ival = a->ival op b.ival;                \
-    a->type = CW_VALUE_INT;                     \
+#define OP_BINARY_INT(op) {                         \
+        cwValue b = cw_pop_stack(cw);               \
+        cwValue* a = cw_peek_stack(cw, 0);          \
+        a->ival = a->ival op b.ival;                \
+        a->type = CW_VALUE_INT;                     \
     } break
-#define OP_BINARY_FLOAT(op) {                   \
-    cwValue b = cw_pop_stack(cw);               \
-    cwValue* a = cw_peek_stack(cw, 0);          \
-    a->fval = cw_valtof(*a) op cw_valtof(b);    \
-    a->type = CW_VALUE_FLOAT;                   \
+#define OP_BINARY_FLOAT(op) {                       \
+        cwValue b = cw_pop_stack(cw);               \
+        cwValue* a = cw_peek_stack(cw, 0);          \
+        a->fval = cw_valtof(*a) op cw_valtof(b);    \
+        a->type = CW_VALUE_FLOAT;                   \
     } break
-#define OP_COMPARISON(op) {                                         \
-        cwValue b = cw_pop_stack(cw);                               \
-        cwValue a = cw_pop_stack(cw);                               \
-        cw_push_stack(cw, CW_MAKE_BOOL(cw_value_cmp(a, b) op 0));   \
+#define OP_COMPARE_INT(op) {                        \
+        cwValue b = cw_pop_stack(cw);               \
+        cwValue* a = cw_peek_stack(cw, 0);          \
+        a->ival = (a->ival - b.ival) op 0;          \
+        a->type = CW_VALUE_BOOL;                    \
+    } break
+#define OP_COMPARE_FLOAT(op) {                          \
+        cwValue b = cw_pop_stack(cw);                   \
+        cwValue* a = cw_peek_stack(cw, 0);              \
+        a->ival = (cw_valtof(*a) - cw_valtof(b)) op 0;  \
+        a->type = CW_VALUE_BOOL;                        \
     } break
 
     while (true)
@@ -60,25 +67,26 @@ static InterpretResult cw_run(cwRuntime* cw)
         {
             case OP_PUSH:   cw_push_stack(cw, READ_CONSTANT()); break;
             case OP_POP:    cw_pop_stack(cw); break;
-            case OP_ADD_I:  OP_BINARY_INT(+);
-            case OP_SUB_I:  OP_BINARY_INT(-);
-            case OP_MUL_I:  OP_BINARY_INT(*);
-            case OP_DIV_I:  OP_BINARY_INT(/);
-            case OP_ADD_F:  OP_BINARY_FLOAT(+);
-            case OP_SUB_F:  OP_BINARY_FLOAT(-);
-            case OP_MUL_F:  OP_BINARY_FLOAT(*);
-            case OP_DIV_F:  OP_BINARY_FLOAT(/);
-            case OP_NEG:
+            case OP_ADD_I:  OP_BINARY_INT(+);   case OP_ADD_F:  OP_BINARY_FLOAT(+);
+            case OP_SUB_I:  OP_BINARY_INT(-);   case OP_SUB_F:  OP_BINARY_FLOAT(-);
+            case OP_MUL_I:  OP_BINARY_INT(*);   case OP_MUL_F:  OP_BINARY_FLOAT(*);
+            case OP_DIV_I:  OP_BINARY_INT(/);   case OP_DIV_F:  OP_BINARY_FLOAT(/);
+            case OP_NEG_I:
             {
                 cwValue* val = cw_peek_stack(cw, 0);
-                if (val->type == CW_VALUE_FLOAT)  val->fval = -val->fval;
-                else                              val->ival = -val->ival;
+                val->ival = -val->ival;
                 break;
             }
-            case OP_LT:     OP_COMPARISON(<);
-            case OP_LTEQ:   OP_COMPARISON(<=);
-            case OP_GT:     OP_COMPARISON(>);
-            case OP_GTEQ:   OP_COMPARISON(>=);
+            case OP_NEG_F:
+            {
+                cwValue* val = cw_peek_stack(cw, 0);
+                val->fval = -val->fval;
+                break;
+            }
+            case OP_LT_I:   OP_COMPARE_INT(<);  case OP_LT_F:   OP_COMPARE_FLOAT(<);
+            case OP_LTEQ_I: OP_COMPARE_INT(<=); case OP_LTEQ_F: OP_COMPARE_FLOAT(<=);
+            case OP_GT_I:   OP_COMPARE_INT(>);  case OP_GT_F:   OP_COMPARE_FLOAT(>);
+            case OP_GTEQ_I: OP_COMPARE_INT(>=); case OP_GTEQ_F: OP_COMPARE_FLOAT(>=);
             case OP_NOT:
             {
                 cwValue* val = cw_peek_stack(cw, 0);
@@ -120,7 +128,8 @@ static InterpretResult cw_run(cwRuntime* cw)
 #undef READ_CONSTANT
 #undef OP_BINARY_INT
 #undef OP_BINARY_FLOAT
-#undef OP_COMPARISON
+#undef OP_COMPARE_INT
+#undef OP_COMPARE_FLOAT
 }
 
 InterpretResult cw_interpret(cwRuntime* cw, const char* src)
