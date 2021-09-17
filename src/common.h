@@ -47,11 +47,6 @@ typedef struct
     int*     lines;
     size_t len;
     size_t cap;
-
-    /* constants */
-    cwValue* constants;
-    size_t const_len;
-    size_t const_cap;
 } cwChunk;
 
 void cw_chunk_init(cwChunk* chunk);

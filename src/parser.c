@@ -24,10 +24,11 @@ typedef struct
 static cwValueType cw_parse_integer (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_float   (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_string  (cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign);
-static cwValueType cw_parse_unary   (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_literal (cwRuntime* cw, bool can_assign);
 static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign);
+
+static cwValueType cw_parse_grouping(cwRuntime* cw, bool can_assign);
+static cwValueType cw_parse_unary   (cwRuntime* cw, bool can_assign);
 
 static cwValueType cw_parse_binary(cwRuntime* cw, cwValueType left, bool can_assign);
 static cwValueType cw_parse_and   (cwRuntime* cw, cwValueType left, bool can_assign);
@@ -64,9 +65,9 @@ ParseRule rules[] = {
     [TOKEN_INTEGER]     = { cw_parse_integer,   NULL,             PREC_NONE },
     [TOKEN_FLOAT]       = { cw_parse_float,     NULL,             PREC_NONE },
     // Keywords.
-    [TOKEN_NULL]        = { NULL,               NULL,             PREC_NONE },
-    [TOKEN_TRUE]        = { NULL,               NULL,             PREC_NONE },
-    [TOKEN_FALSE]       = { NULL,               NULL,             PREC_NONE },
+    [TOKEN_NULL]        = { cw_parse_literal,   NULL,             PREC_NONE },
+    [TOKEN_TRUE]        = { cw_parse_literal,   NULL,             PREC_NONE },
+    [TOKEN_FALSE]       = { cw_parse_literal,   NULL,             PREC_NONE },
     [TOKEN_IF]          = { NULL,               NULL,             PREC_NONE },
     [TOKEN_ELSE]        = { NULL,               NULL,             PREC_NONE },
     [TOKEN_WHILE]       = { NULL,               NULL,             PREC_NONE },
@@ -83,10 +84,7 @@ cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
     cwPrefixRule prefix_rule = rules[cw->previous.type].prefix;
 
     if (!prefix_rule)
-    {
         cw_syntax_error_at(&cw->previous, "Expect expression");
-        return CW_VALUE_NULL;
-    }
 
     bool can_assign = precedence <= PREC_ASSIGNMENT;
     cwValueType left = prefix_rule(cw, can_assign);
@@ -108,21 +106,35 @@ cwValueType cw_parse_precedence(cwRuntime* cw, Precedence precedence)
 /* --------------------------| parse callbacks |----------------------------------------- */
 static cwValueType cw_parse_integer(cwRuntime* cw, bool can_assign)
 {
-    int32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
-    cw_emit_bytes(cw->chunk, OP_PUSH, cw_make_constant(cw, CW_MAKE_INT(value)), cw->previous.line);
+    uint32_t value = strtol(cw->previous.start, NULL, cw_token_get_base(&cw->previous));
+    cw_emit_byte(cw->chunk, OP_PUSH_I, cw->previous.line);
+    cw_emit_uint32(cw->chunk, value, cw->previous.line);
     return CW_VALUE_INT;
 }
 
 static cwValueType cw_parse_float(cwRuntime* cw, bool can_assign)
 {
     float value = strtod(cw->previous.start, NULL);
-    cw_emit_bytes(cw->chunk, OP_PUSH, cw_make_constant(cw, CW_MAKE_FLOAT(value)), cw->previous.line);
+    cw_emit_byte(cw->chunk, OP_PUSH_F, cw->previous.line);
+    cw_emit_uint32(cw->chunk, *((uint32_t*)&value), cw->previous.line);
     return CW_VALUE_FLOAT;
 }
 
 static cwValueType cw_parse_string(cwRuntime* cw, bool can_assign)
 {
     return CW_VALUE_NULL;
+}
+
+static cwValueType cw_parse_literal(cwRuntime* cw, bool can_assign)
+{
+    /*
+    switch (cw->previous.type)
+    {
+    case TOKEN_NULL:  cw_emit_byte(cw->chunk, OP_NULL, cw->previous.line); break;
+    case TOKEN_TRUE:  cw_emit_byte(cw->chunk, OP_TRUE, cw->previous.line); break;
+    case TOKEN_FALSE: cw_emit_byte(cw->chunk, OP_FALSE, cw->previous.line); break;
+    }
+    */
 }
 
 static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign)
@@ -144,7 +156,7 @@ static cwValueType cw_parse_unary(cwRuntime* cw, bool can_assign)
 
     switch (operator)
     {
-    case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT, cw->previous.line); break;
+    case TOKEN_EXCLAMATION: cw_emit_byte(cw->chunk, OP_NOT, cw->previous.line); return CW_VALUE_BOOL;
     case TOKEN_MINUS:       
         cw_emit_byte(cw->chunk, result_type == CW_VALUE_FLOAT ? OP_NEG_F : OP_NEG_I, cw->previous.line); 
         break;
@@ -201,9 +213,10 @@ static cwValueType cw_parse_or(cwRuntime* cw, cwValueType left, bool can_assign)
     int end_jump  = cw_emit_jump(cw->chunk, OP_JUMP, cw->previous.line);
 
     cw_patch_jump(cw, or_jump);
-    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
 
+    cw_emit_byte(cw->chunk, OP_POP, cw->previous.line);
     cw_parse_precedence(cw, PREC_OR);
+    
     cw_patch_jump(cw, end_jump);
     return CW_VALUE_BOOL;
 }

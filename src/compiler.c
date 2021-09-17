@@ -10,25 +10,6 @@
 #include "memory.h"
 #include "runtime.h"
 
-uint8_t cw_make_constant(cwRuntime* cw, cwValue val)
-{
-    if (cw->chunk->const_cap < cw->chunk->const_len + 1)
-    {
-        int old_cap = cw->chunk->const_cap;
-        cw->chunk->const_cap = CW_GROW_CAPACITY(old_cap);
-        cw->chunk->constants = CW_GROW_ARRAY(cwValue, cw->chunk->constants, old_cap, cw->chunk->const_cap);
-    }
-
-    cw->chunk->constants[cw->chunk->const_len] = val;
-    if (cw->chunk->const_len > UINT8_MAX)
-    {
-        cw_syntax_error_at(&cw->previous, "Too many constants in one chunk.");
-        return 0;
-    }
-
-    return (uint8_t)cw->chunk->const_len++;
-}
-
 /* --------------------------| writing byte code |--------------------------------------- */
 void cw_emit_byte(cwChunk* chunk, uint8_t byte, int line)
 {
@@ -49,6 +30,14 @@ void cw_emit_bytes(cwChunk* chunk, uint8_t a, uint8_t b, int line)
 {
     cw_emit_byte(chunk, a, line);
     cw_emit_byte(chunk, b, line);
+}
+
+void cw_emit_uint32(cwChunk* chunk, uint32_t value, int line)
+{
+    cw_emit_byte(chunk, (value >> 24) & 0xff, line);
+    cw_emit_byte(chunk, (value >> 16) & 0xff, line);
+    cw_emit_byte(chunk, (value >> 8) & 0xff, line);
+    cw_emit_byte(chunk, value & 0xff, line);
 }
 
 int cw_emit_jump(cwChunk* chunk, uint8_t instruction, int line)

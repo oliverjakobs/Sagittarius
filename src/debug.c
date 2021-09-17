@@ -21,13 +21,29 @@ static int cw_disassemble_simple(const char* name, int offset)
     return offset + 1;
 }
 
-static int cw_disassemble_constant(const char* name, const cwChunk* chunk, int offset)
+static int cw_disassemble_int32(const char* name, const cwChunk* chunk, int offset)
 {
-    uint8_t constant = chunk->bytes[offset + 1];
-    printf("%-16s %4d '", name, constant);
-    cw_print_value(chunk->constants[constant]);
-    printf("'\n");
-    return offset + 2;
+    uint8_t b1 = chunk->bytes[offset + 1];
+    uint8_t b2 = chunk->bytes[offset + 2];
+    uint8_t b3 = chunk->bytes[offset + 3];
+    uint8_t b4 = chunk->bytes[offset + 4];
+    printf("%-16s %4x %x %x %x  ", name, b1, b2, b3, b4);
+
+    printf("'%d'\n", (int32_t)((b1 << 24) | (b2 << 16) | (b3 << 8) | b4));
+    return offset + 5;
+}
+
+static int cw_disassemble_float(const char* name, const cwChunk* chunk, int offset)
+{
+    uint8_t b1 = chunk->bytes[offset + 1];
+    uint8_t b2 = chunk->bytes[offset + 2];
+    uint8_t b3 = chunk->bytes[offset + 3];
+    uint8_t b4 = chunk->bytes[offset + 4];
+    printf("%-16s %4x %x %x %x  ", name, b1, b2, b3, b4);
+    
+    uint32_t ival = (uint32_t)((b1 << 24) | (b2 << 16) | (b3 << 8) | b4);
+    printf("'%f'\n", *((float*)&ival));
+    return offset + 5;
 }
 
 static int cw_disassemble_byte(const char* name, const cwChunk* chunk, int offset)
@@ -55,7 +71,8 @@ int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
     uint8_t instruction = chunk->bytes[offset];
     switch (instruction)
     {
-    case OP_PUSH:           return cw_disassemble_constant("OP_PUSH", chunk, offset);
+    case OP_PUSH_I:         return cw_disassemble_int32("OP_PUSH_I", chunk, offset);
+    case OP_PUSH_F:         return cw_disassemble_float("OP_PUSH_F", chunk, offset);
     case OP_POP:            return cw_disassemble_simple("OP_POP", offset);
     case OP_ADD_I:          return cw_disassemble_simple("OP_ADD_I", offset);
     case OP_SUB_I:          return cw_disassemble_simple("OP_SUB_I", offset);

@@ -23,6 +23,7 @@ static InterpretResult cw_run(cwRuntime* cw)
 {
 #define READ_BYTE()     (*cw->ip++)
 #define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
+#define READ_INT32()    (cw->ip += 4, (int32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]))
 #define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
 #define OP_BINARY_INT(op) {                         \
         cwValue b = cw_pop_stack(cw);               \
@@ -65,7 +66,20 @@ static InterpretResult cw_run(cwRuntime* cw)
         uint8_t instruction = READ_BYTE();
         switch (instruction)
         {
-            case OP_PUSH:   cw_push_stack(cw, READ_CONSTANT()); break;
+            case OP_PUSH_I:
+            {
+                cw->ip += 4;
+                int32_t value = (int32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]);
+                cw_push_stack(cw, CW_MAKE_INT(value)); 
+                break;
+            }
+            case OP_PUSH_F:
+            {
+                cw->ip += 4;
+                uint32_t ival = (uint32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]);
+                cw_push_stack(cw, CW_MAKE_FLOAT(*((float*)&ival)));
+                break;
+            }
             case OP_POP:    cw_pop_stack(cw); break;
             case OP_ADD_I:  OP_BINARY_INT(+);   case OP_ADD_F:  OP_BINARY_FLOAT(+);
             case OP_SUB_I:  OP_BINARY_INT(-);   case OP_SUB_F:  OP_BINARY_FLOAT(-);
