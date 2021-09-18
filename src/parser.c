@@ -127,14 +127,12 @@ static cwValueType cw_parse_string(cwRuntime* cw, bool can_assign)
 
 static cwValueType cw_parse_literal(cwRuntime* cw, bool can_assign)
 {
-    /*
     switch (cw->previous.type)
     {
-    case TOKEN_NULL:  cw_emit_byte(cw->chunk, OP_NULL, cw->previous.line); break;
-    case TOKEN_TRUE:  cw_emit_byte(cw->chunk, OP_TRUE, cw->previous.line); break;
-    case TOKEN_FALSE: cw_emit_byte(cw->chunk, OP_FALSE, cw->previous.line); break;
+    case TOKEN_NULL:  cw_emit_byte(cw->chunk, OP_PUSH_NULL,  cw->previous.line); return CW_VALUE_NULL;
+    case TOKEN_TRUE:  cw_emit_byte(cw->chunk, OP_PUSH_TRUE,  cw->previous.line); return CW_VALUE_BOOL;
+    case TOKEN_FALSE: cw_emit_byte(cw->chunk, OP_PUSH_FALSE, cw->previous.line); return CW_VALUE_BOOL;
     }
-    */
 }
 
 static cwValueType cw_parse_variable(cwRuntime* cw, bool can_assign)

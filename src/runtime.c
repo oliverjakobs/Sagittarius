@@ -22,26 +22,25 @@ void cw_free(cwRuntime* cw)
 static InterpretResult cw_run(cwRuntime* cw)
 {
 #define READ_BYTE()     (*cw->ip++)
-#define READ_SHORT()    (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
-#define READ_INT32()    (cw->ip += 4, (int32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]))
-#define READ_CONSTANT() (cw->chunk->constants[READ_BYTE()])
-#define OP_BINARY_INT(op) {                         \
-        cwValue b = cw_pop_stack(cw);               \
-        cwValue* a = cw_peek_stack(cw, 0);          \
-        a->ival = a->ival op b.ival;                \
-        a->type = CW_VALUE_INT;                     \
+#define READ_WORD()     (cw->ip += 2, (uint16_t)((cw->ip[-2] << 8) | cw->ip[-1]))
+#define READ_DWORD()    (cw->ip += 4, (uint32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]))
+#define OP_BINARY_INT(op) {                             \
+        cwValue b = cw_pop_stack(cw);                   \
+        cwValue* a = cw_peek_stack(cw, 0);              \
+        a->ival = a->ival op b.ival;                    \
+        a->type = CW_VALUE_INT;                         \
     } break
-#define OP_BINARY_FLOAT(op) {                       \
-        cwValue b = cw_pop_stack(cw);               \
-        cwValue* a = cw_peek_stack(cw, 0);          \
-        a->fval = cw_valtof(*a) op cw_valtof(b);    \
-        a->type = CW_VALUE_FLOAT;                   \
+#define OP_BINARY_FLOAT(op) {                           \
+        cwValue b = cw_pop_stack(cw);                   \
+        cwValue* a = cw_peek_stack(cw, 0);              \
+        a->fval = cw_valtof(*a) op cw_valtof(b);        \
+        a->type = CW_VALUE_FLOAT;                       \
     } break
-#define OP_COMPARE_INT(op) {                        \
-        cwValue b = cw_pop_stack(cw);               \
-        cwValue* a = cw_peek_stack(cw, 0);          \
-        a->ival = (a->ival - b.ival) op 0;          \
-        a->type = CW_VALUE_BOOL;                    \
+#define OP_COMPARE_INT(op) {                            \
+        cwValue b = cw_pop_stack(cw);                   \
+        cwValue* a = cw_peek_stack(cw, 0);              \
+        a->ival = (a->ival - b.ival) op 0;              \
+        a->type = CW_VALUE_BOOL;                        \
     } break
 #define OP_COMPARE_FLOAT(op) {                          \
         cwValue b = cw_pop_stack(cw);                   \
@@ -68,18 +67,19 @@ static InterpretResult cw_run(cwRuntime* cw)
         {
             case OP_PUSH_I:
             {
-                cw->ip += 4;
-                int32_t value = (int32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]);
+                uint32_t value = READ_DWORD();
                 cw_push_stack(cw, CW_MAKE_INT(value)); 
                 break;
             }
             case OP_PUSH_F:
             {
-                cw->ip += 4;
-                uint32_t ival = (uint32_t)((cw->ip[-4] << 24) | (cw->ip[-3] << 16) | (cw->ip[-2] << 8) | cw->ip[-1]);
-                cw_push_stack(cw, CW_MAKE_FLOAT(*((float*)&ival)));
+                uint32_t value = READ_DWORD();
+                cw_push_stack(cw, CW_MAKE_FLOAT(*((float*)&value)));
                 break;
             }
+            case OP_PUSH_NULL:  cw_push_stack(cw, CW_MAKE_NULL());
+            case OP_PUSH_TRUE:  cw_push_stack(cw, CW_MAKE_BOOL(true));
+            case OP_PUSH_FALSE: cw_push_stack(cw, CW_MAKE_BOOL(false));
             case OP_POP:    cw_pop_stack(cw); break;
             case OP_ADD_I:  OP_BINARY_INT(+);   case OP_ADD_F:  OP_BINARY_FLOAT(+);
             case OP_SUB_I:  OP_BINARY_INT(-);   case OP_SUB_F:  OP_BINARY_FLOAT(-);
@@ -110,20 +110,20 @@ static InterpretResult cw_run(cwRuntime* cw)
             }
             case OP_JUMP_IF_FALSE:
             {
-                uint16_t offset = READ_SHORT();
+                uint16_t offset = READ_WORD();
                 if (cw_value_is_falsey(cw_peek_stack(cw, 0))) cw->ip += offset;
                 break;
             }
             /* NOTE: combine OP_JUMP and OP_LOOP */
             case OP_JUMP:
             {
-                uint16_t offset = READ_SHORT();
+                uint16_t offset = READ_WORD();
                 cw->ip += offset;
                 break;
             }
             case OP_LOOP:
             {
-                uint16_t offset = READ_SHORT();
+                uint16_t offset = READ_WORD();
                 cw->ip -= offset;
                 break;
             }
@@ -138,8 +138,8 @@ static InterpretResult cw_run(cwRuntime* cw)
     }
 
 #undef READ_BYTE
-#undef READ_SHORT
-#undef READ_CONSTANT
+#undef READ_WORD
+#undef READ_DWORD
 #undef OP_BINARY_INT
 #undef OP_BINARY_FLOAT
 #undef OP_COMPARE_INT
