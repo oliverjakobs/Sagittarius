@@ -26,13 +26,7 @@ void cw_emit_byte(cwChunk* chunk, uint8_t byte, int line)
     chunk->len++;
 }
 
-void cw_emit_bytes(cwChunk* chunk, uint8_t a, uint8_t b, int line)
-{
-    cw_emit_byte(chunk, a, line);
-    cw_emit_byte(chunk, b, line);
-}
-
-void cw_emit_uint32(cwChunk* chunk, uint32_t value, int line)
+void cw_emit_dword(cwChunk* chunk, uint32_t value, int line)
 {
     cw_emit_byte(chunk, (value >> 24) & 0xff, line);
     cw_emit_byte(chunk, (value >> 16) & 0xff, line);

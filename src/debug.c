@@ -21,7 +21,7 @@ static int cw_disassemble_simple(const char* name, int offset)
     return offset + 1;
 }
 
-static int cw_disassemble_int32(const char* name, const cwChunk* chunk, int offset)
+static int cw_disassemble_dword(const char* name, const cwChunk* chunk, int offset)
 {
     uint8_t b1 = chunk->bytes[offset + 1];
     uint8_t b2 = chunk->bytes[offset + 2];
@@ -30,19 +30,6 @@ static int cw_disassemble_int32(const char* name, const cwChunk* chunk, int offs
     printf("%-16s %4x %x %x %x  ", name, b1, b2, b3, b4);
 
     printf("'%d'\n", (int32_t)((b1 << 24) | (b2 << 16) | (b3 << 8) | b4));
-    return offset + 5;
-}
-
-static int cw_disassemble_float(const char* name, const cwChunk* chunk, int offset)
-{
-    uint8_t b1 = chunk->bytes[offset + 1];
-    uint8_t b2 = chunk->bytes[offset + 2];
-    uint8_t b3 = chunk->bytes[offset + 3];
-    uint8_t b4 = chunk->bytes[offset + 4];
-    printf("%-16s %4x %x %x %x  ", name, b1, b2, b3, b4);
-    
-    uint32_t ival = (uint32_t)((b1 << 24) | (b2 << 16) | (b3 << 8) | b4);
-    printf("'%f'\n", *((float*)&ival));
     return offset + 5;
 }
 
@@ -71,30 +58,20 @@ int  cw_disassemble_instruction(const cwChunk* chunk, int offset)
     uint8_t instruction = chunk->bytes[offset];
     switch (instruction)
     {
-    case OP_PUSH_I:         return cw_disassemble_int32("OP_PUSH_I", chunk, offset);
-    case OP_PUSH_F:         return cw_disassemble_float("OP_PUSH_F", chunk, offset);
+    case OP_PUSH:           return cw_disassemble_dword("OP_PUSH", chunk, offset);
     case OP_POP:            return cw_disassemble_simple("OP_POP", offset);
-    case OP_ADD_I:          return cw_disassemble_simple("OP_ADD_I", offset);
-    case OP_SUB_I:          return cw_disassemble_simple("OP_SUB_I", offset);
-    case OP_MUL_I:          return cw_disassemble_simple("OP_MUL_I", offset);
-    case OP_DIV_I:          return cw_disassemble_simple("OP_DIV_I", offset);
-    case OP_ADD_F:          return cw_disassemble_simple("OP_ADD_F", offset);
-    case OP_SUB_F:          return cw_disassemble_simple("OP_SUB_F", offset);
-    case OP_MUL_F:          return cw_disassemble_simple("OP_MUL_F", offset);
-    case OP_DIV_F:          return cw_disassemble_simple("OP_DIV_F", offset);
-    case OP_NEG_I:          return cw_disassemble_simple("OP_NEG_I", offset);
-    case OP_NEG_F:          return cw_disassemble_simple("OP_NEG_F", offset);
+    case OP_ADD:            return cw_disassemble_simple("OP_ADD", offset);
+    case OP_SUB:            return cw_disassemble_simple("OP_SUB", offset);
+    case OP_MUL:            return cw_disassemble_simple("OP_MUL", offset);
+    case OP_DIV:            return cw_disassemble_simple("OP_DIV", offset);
+    case OP_NEG:            return cw_disassemble_simple("OP_NEG", offset);
     case OP_NOT:            return cw_disassemble_simple("OP_NOT", offset);
     case OP_EQ:             return cw_disassemble_simple("OP_EQ", offset);
     case OP_NOTEQ:          return cw_disassemble_simple("OP_NOTEQ", offset);
-    case OP_LT_I:           return cw_disassemble_simple("OP_LT_I", offset);
-    case OP_LTEQ_I:         return cw_disassemble_simple("OP_LTEQ_I", offset);
-    case OP_GT_I:           return cw_disassemble_simple("OP_GT_I", offset);
-    case OP_GTEQ_I:         return cw_disassemble_simple("OP_GTEQ_I", offset);
-    case OP_LT_F:           return cw_disassemble_simple("OP_LT_F", offset);
-    case OP_LTEQ_F:         return cw_disassemble_simple("OP_LTEQ_F", offset);
-    case OP_GT_F:           return cw_disassemble_simple("OP_GT_F", offset);
-    case OP_GTEQ_F:         return cw_disassemble_simple("OP_GTEQ_F", offset);
+    case OP_LT:             return cw_disassemble_simple("OP_LT", offset);
+    case OP_LTEQ:           return cw_disassemble_simple("OP_LTEQ", offset);
+    case OP_GT:             return cw_disassemble_simple("OP_GT", offset);
+    case OP_GTEQ:           return cw_disassemble_simple("OP_GTEQ", offset);
     case OP_JUMP_IF_FALSE:  return cw_disassemble_jump("OP_JUMP_IF_FALSE", 1, chunk, offset);
     case OP_JUMP:           return cw_disassemble_jump("OP_JUMP", 1, chunk, offset);
     case OP_LOOP:           return cw_disassemble_jump("OP_LOOP", -1, chunk, offset);
@@ -110,9 +87,8 @@ void cw_print_value(cwValue val)
     switch (val.type)
     {
     case CW_VALUE_NULL:     printf("null"); break;
-    case CW_VALUE_BOOL:     printf(val.ival ? "true" : "false"); break;
-    case CW_VALUE_INT:      printf("%d", val.ival); break;
-    case CW_VALUE_FLOAT:    printf("%g", val.fval); break;
+    case CW_VALUE_BOOL:     printf(val.val ? "true" : "false"); break;
+    case CW_VALUE_INT:      printf("%d", val.val); break;
     }
 }
 

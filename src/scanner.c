@@ -40,9 +40,7 @@ static cwTokenType cw_identifier_type(const char* start, const char* stream)
 {
     switch (start[0])
     {
-    case 'b': return cw_check_keyword(start, stream, 1, "reak", TOKEN_BREAK);
-    case 'c': return cw_check_keyword(start, stream, 1, "ontinue", TOKEN_CONTINUE);
-    case 'd': return cw_check_keyword(start, stream, 1, "atatype", TOKEN_DATATYPE);
+    case 'a': return cw_check_keyword(start, stream, 1, "nd", TOKEN_AND);
     case 'e': return cw_check_keyword(start, stream, 1, "lse", TOKEN_ELSE);
     case 'i': return cw_check_keyword(start, stream, 1, "f", TOKEN_IF);
     case 'f':
@@ -59,6 +57,7 @@ static cwTokenType cw_identifier_type(const char* start, const char* stream)
     case 'l': return cw_check_keyword(start, stream, 1, "et", TOKEN_LET);
     case 'm': return cw_check_keyword(start, stream, 1, "ut", TOKEN_MUT);
     case 'n': return cw_check_keyword(start, stream, 1, "ull", TOKEN_NULL);
+    case 'o': return cw_check_keyword(start, stream, 1, "r", TOKEN_OR);
     case 'r': return cw_check_keyword(start, stream, 1, "eturn", TOKEN_RETURN);
     case 't': return cw_check_keyword(start, stream, 1, "rue", TOKEN_RETURN);
     case 'w': return cw_check_keyword(start, stream, 1, "hile", TOKEN_WHILE);
@@ -93,14 +92,6 @@ static int cw_scan_token(cwToken* token)
         cursor++;
         while (cw_isdigit(*cursor)) cursor++;
         token->type = TOKEN_INTEGER;
-
-        // Look for a fractional part.
-        if (cursor[0] == '.' && cw_isdigit(cursor[1]))
-        {
-            cursor++; /* Consume the ".". */
-            while (cw_isdigit(*cursor)) cursor++;
-            token->type = TOKEN_FLOAT;
-        }
         break;
     }
     case 'a': case 'b': case 'c': case 'd': case 'e': case 'f': case 'g': case 'h': case 'i': case 'j':
@@ -116,23 +107,6 @@ static int cw_scan_token(cwToken* token)
         token->type = cw_identifier_type(token->start, cursor);
         break;
     }
-    case '"':
-    {
-        cursor++; /* skip the opening quote */
-        while (*cursor != '"')
-        {
-            if (*cursor == '\0' || *cursor == '\n')
-            {
-                cw_syntax_error(token->line, "Unterminated string.");
-                return 0;
-            }
-            cursor++;
-        }
-        cursor++; /* skip the closing quote */
-
-        token->type = TOKEN_STRING;
-        break;
-    }
     CW_TOKEN_CASE1('(', TOKEN_LPAREN)
     CW_TOKEN_CASE1(')', TOKEN_RPAREN)
     CW_TOKEN_CASE1('{', TOKEN_LBRACE)
@@ -143,12 +117,10 @@ static int cw_scan_token(cwToken* token)
     CW_TOKEN_CASE1(',', TOKEN_COMMA)
     CW_TOKEN_CASE1(':', TOKEN_COLON)
     CW_TOKEN_CASE1(';', TOKEN_SEMICOLON)
-    CW_TOKEN_CASE2('&', TOKEN_BIT_AND,  '&', TOKEN_AND)
-    CW_TOKEN_CASE2('|', TOKEN_BIT_OR,   '|', TOKEN_OR)
-    CW_TOKEN_CASE3('-', TOKEN_MINUS,    '-', TOKEN_DEC, '=', TOKEN_SUB_ASSIGN)
-    CW_TOKEN_CASE3('+', TOKEN_PLUS,     '+', TOKEN_INC, '=', TOKEN_ADD_ASSIGN)
-    CW_TOKEN_CASE2('/', TOKEN_SLASH,    '=', TOKEN_DIV_ASSIGN)
-    CW_TOKEN_CASE2('*', TOKEN_ASTERISK, '=', TOKEN_MULT_ASSIGN)
+    CW_TOKEN_CASE1('-', TOKEN_MINUS)
+    CW_TOKEN_CASE1('+', TOKEN_PLUS)
+    CW_TOKEN_CASE1('/', TOKEN_SLASH)
+    CW_TOKEN_CASE1('*', TOKEN_ASTERISK)
     CW_TOKEN_CASE2('!', TOKEN_EXCLAMATION,  '=', TOKEN_NOTEQ)
     CW_TOKEN_CASE2('=', TOKEN_ASSIGN,       '=', TOKEN_EQ)
     CW_TOKEN_CASE2('<', TOKEN_LT,           '=', TOKEN_LTEQ)

@@ -27,25 +27,13 @@ static InterpretResult cw_run(cwRuntime* cw)
 #define OP_BINARY_INT(op) {                             \
         cwValue b = cw_pop_stack(cw);                   \
         cwValue* a = cw_peek_stack(cw, 0);              \
-        a->ival = a->ival op b.ival;                    \
+        a->val = a->val op b.val;                    \
         a->type = CW_VALUE_INT;                         \
-    } break
-#define OP_BINARY_FLOAT(op) {                           \
-        cwValue b = cw_pop_stack(cw);                   \
-        cwValue* a = cw_peek_stack(cw, 0);              \
-        a->fval = cw_valtof(*a) op cw_valtof(b);        \
-        a->type = CW_VALUE_FLOAT;                       \
     } break
 #define OP_COMPARE_INT(op) {                            \
         cwValue b = cw_pop_stack(cw);                   \
         cwValue* a = cw_peek_stack(cw, 0);              \
-        a->ival = (a->ival - b.ival) op 0;              \
-        a->type = CW_VALUE_BOOL;                        \
-    } break
-#define OP_COMPARE_FLOAT(op) {                          \
-        cwValue b = cw_pop_stack(cw);                   \
-        cwValue* a = cw_peek_stack(cw, 0);              \
-        a->ival = (cw_valtof(*a) - cw_valtof(b)) op 0;  \
+        a->val = (a->val - b.val) op 0;              \
         a->type = CW_VALUE_BOOL;                        \
     } break
 
@@ -65,46 +53,34 @@ static InterpretResult cw_run(cwRuntime* cw)
         uint8_t instruction = READ_BYTE();
         switch (instruction)
         {
-            case OP_PUSH_I:
+            case OP_PUSH:
             {
                 uint32_t value = READ_DWORD();
                 cw_push_stack(cw, CW_MAKE_INT(value)); 
-                break;
-            }
-            case OP_PUSH_F:
-            {
-                uint32_t value = READ_DWORD();
-                cw_push_stack(cw, CW_MAKE_FLOAT(*((float*)&value)));
                 break;
             }
             case OP_PUSH_NULL:  cw_push_stack(cw, CW_MAKE_NULL());
             case OP_PUSH_TRUE:  cw_push_stack(cw, CW_MAKE_BOOL(true));
             case OP_PUSH_FALSE: cw_push_stack(cw, CW_MAKE_BOOL(false));
             case OP_POP:    cw_pop_stack(cw); break;
-            case OP_ADD_I:  OP_BINARY_INT(+);   case OP_ADD_F:  OP_BINARY_FLOAT(+);
-            case OP_SUB_I:  OP_BINARY_INT(-);   case OP_SUB_F:  OP_BINARY_FLOAT(-);
-            case OP_MUL_I:  OP_BINARY_INT(*);   case OP_MUL_F:  OP_BINARY_FLOAT(*);
-            case OP_DIV_I:  OP_BINARY_INT(/);   case OP_DIV_F:  OP_BINARY_FLOAT(/);
-            case OP_NEG_I:
+            case OP_ADD:  OP_BINARY_INT(+);
+            case OP_SUB:  OP_BINARY_INT(-);
+            case OP_MUL:  OP_BINARY_INT(*);
+            case OP_DIV:  OP_BINARY_INT(/);
+            case OP_NEG:
             {
                 cwValue* val = cw_peek_stack(cw, 0);
-                val->ival = -val->ival;
+                val->val = -val->val;
                 break;
             }
-            case OP_NEG_F:
-            {
-                cwValue* val = cw_peek_stack(cw, 0);
-                val->fval = -val->fval;
-                break;
-            }
-            case OP_LT_I:   OP_COMPARE_INT(<);  case OP_LT_F:   OP_COMPARE_FLOAT(<);
-            case OP_LTEQ_I: OP_COMPARE_INT(<=); case OP_LTEQ_F: OP_COMPARE_FLOAT(<=);
-            case OP_GT_I:   OP_COMPARE_INT(>);  case OP_GT_F:   OP_COMPARE_FLOAT(>);
-            case OP_GTEQ_I: OP_COMPARE_INT(>=); case OP_GTEQ_F: OP_COMPARE_FLOAT(>=);
+            case OP_LT:   OP_COMPARE_INT(<);
+            case OP_LTEQ: OP_COMPARE_INT(<=);
+            case OP_GT:   OP_COMPARE_INT(>);
+            case OP_GTEQ: OP_COMPARE_INT(>=);
             case OP_NOT:
             {
                 cwValue* val = cw_peek_stack(cw, 0);
-                val->ival = cw_value_is_falsey(val);
+                val->val = cw_value_is_falsey(val);
                 val->type = CW_VALUE_BOOL;
                 break;
             }

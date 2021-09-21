@@ -8,9 +8,13 @@
 
 int cw_value_is_falsey(const cwValue* val)
 {
-    return val->type == CW_VALUE_NULL                                                       /* null is falsey */
-        || ((val->type == CW_VALUE_BOOL || val->type == CW_VALUE_INT) && val->ival == 0)    /* value of 0 is falsey if type is bool or int */
-        || (val->type == CW_VALUE_FLOAT && fpclassify(val->fval) == FP_ZERO);               /* a value that classifies as FP_ZERO is falsey if type is float */
+    return val->type == CW_VALUE_NULL || ((val->type == CW_VALUE_BOOL || val->type == CW_VALUE_INT) && val->val == 0); 
+}
+
+bool cw_values_equal(cwValue a, cwValue b)
+{
+    if (a.type == b.type) return a.val == b.val;
+    return false;
 }
 
 /* --------------------------| chunk |--------------------------------------------------- */
