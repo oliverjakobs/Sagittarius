@@ -6,32 +6,35 @@
 typedef enum
 {
     TOKEN_EOF = 0,
-    /* single-character tokens */
-    TOKEN_LPAREN,   TOKEN_RPAREN,
-    TOKEN_LBRACE,   TOKEN_RBRACE,
-    TOKEN_LBRACKET, TOKEN_RBRACKET,
-    TOKEN_PERIOD,
-    TOKEN_COMMA,
-    TOKEN_COLON,
-    TOKEN_SEMICOLON,
+    TOKEN_UNKOWN,
+
+    /* identifiers and literals */
+    TOKEN_IDENTIFIER,
+    TOKEN_NUMBER,
+
+    /* operators */
+    TOKEN_ASSIGN,
     TOKEN_PLUS,
     TOKEN_MINUS,
+    TOKEN_BANG,
     TOKEN_ASTERISK,
     TOKEN_SLASH,
-    TOKEN_EXCLAMATION,
-
-    /* assignment */
-    TOKEN_ASSIGN,
 
     /* comparison tokens */
     TOKEN_EQ, TOKEN_NOTEQ,
     TOKEN_LT, TOKEN_LTEQ,
     TOKEN_GT, TOKEN_GTEQ,
 
-    /* Literals */
-    TOKEN_IDENTIFIER,
-    TOKEN_INTEGER,
-    
+    /* delimiters */
+    TOKEN_COMMA,
+    TOKEN_SEMICOLON,
+    TOKEN_COLON,
+
+    /* brackets */
+    TOKEN_LPAREN,   TOKEN_RPAREN,
+    TOKEN_LBRACE,   TOKEN_RBRACE,
+    TOKEN_LBRACKET, TOKEN_RBRACKET,
+
     /* Keywords */
     TOKEN_NULL,
     TOKEN_TRUE,
@@ -48,25 +51,16 @@ typedef enum
     TOKEN_RETURN
 } cwTokenType;
 
-typedef enum
-{
-    TOKENMOD_NONE = 0,
-    TOKENMOD_BIN,
-    TOKENMOD_OCT,
-    TOKENMOD_HEX,
-} cwTokenMod;
-
 struct cwToken
 {
     cwTokenType type;
-    cwTokenMod mod;
     const char* start;
     const char* end;
     int line;
 };
 
-void cw_next_token(cwToken* next, cwToken* prev);
+const char* cwNextToken(const char* stream, int* line, cwToken* token);
 
-int cw_token_get_base(const cwToken* token);
+const char* cwTokenTypeName(cwTokenType type);
 
 #endif /* !CLOCKWORK_SCANNER_H */
