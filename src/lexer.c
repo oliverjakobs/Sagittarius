@@ -142,7 +142,7 @@ static TokenType identifier_type(const char* start, const char* stream) {
         case 'n': return check_keyword(start, stream, 1, "ull", TOKEN_NULL);
         case 'o': return check_keyword(start, stream, 1, "r", TOKEN_OR);
         case 'r': return check_keyword(start, stream, 1, "eturn", TOKEN_RETURN);
-        case 't': return check_keyword(start, stream, 1, "rue", TOKEN_RETURN);
+        case 't': return check_keyword(start, stream, 1, "rue", TOKEN_TRUE);
         case 'w': return check_keyword(start, stream, 1, "hile", TOKEN_WHILE);
     }
 

@@ -5,8 +5,6 @@
 
 #include "lexer.c"
 
-
-
 int main(int argc, const char* argv[])
 {
     Token token = {
